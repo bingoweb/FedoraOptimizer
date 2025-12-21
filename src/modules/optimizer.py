@@ -430,6 +430,36 @@ class HardwareDetector:
                 pass
         return psi
 
+    def detect_workload_profile(self) -> List[str]:
+        """Detect installed software to determine workload profiles"""
+        profiles = []
+        
+        # Check for Gaming
+        gaming_apps = ["steam", "lutris", "heroic", "gamemoded"]
+        for app in gaming_apps:
+            s, _, _ = run_command(f"which {app} 2>/dev/null")
+            if s:
+                profiles.append("Gamer")
+                break
+                
+        # Check for Developer
+        dev_apps = ["docker", "podman", "code", "go", "cargo", "node", "java"]
+        for app in dev_apps:
+            s, _, _ = run_command(f"which {app} 2>/dev/null")
+            if s:
+                profiles.append("Developer")
+                break
+                
+        # Check for Server
+        server_apps = ["nginx", "httpd", "mysqld", "postgres", "redis-server"]
+        for app in server_apps:
+            s, _, _ = run_command(f"which {app} 2>/dev/null")
+            if s:
+                profiles.append("Server")
+                break
+        
+        return profiles if profiles else ["Workstation"]
+
     def _get_bios_settings(self):
         """Read DMI tables for virtualization, secure boot, and BIOS info"""
         info = {
@@ -893,6 +923,7 @@ class AIOptimizationEngine:
             "zram_active": self.hw.kernel_features.get("zram", False),
             "btrfs_noatime": self.hw.kernel_features.get("btrfs_noatime", False),
             "psi": self.hw.get_psi_stats(),
+            "profiles": self.hw.detect_workload_profile(),
         }
         
         # Check BBR
@@ -928,6 +959,9 @@ class AIOptimizationEngine:
             "net.ipv4.tcp_fastopen",
             "net.core.rmem_max",
             "kernel.sched_autogroup_enabled",
+            "vm.max_map_count",
+            "kernel.sched_cfs_bandwidth_slice_us",
+            "fs.inotify.max_user_watches",
         ]
         
         current_values = self.scan_current_sysctl(params_to_check)
@@ -1034,6 +1068,47 @@ class AIOptimizationEngine:
                     category="memory",
                     priority="optional",
                     command="dnf install -y zram-generator && systemctl enable --now zram-generator"
+                ))
+        
+        # === SMART PROFILE OPTIMIZATIONS (Area 3) ===
+        profiles = state.get("profiles", [])
+        
+        if "Gamer" in profiles:
+            # Steam & Game fix
+            curr_map = current_values.get("vm.max_map_count", "65530")
+            if len(curr_map) < 9: # Check if less than millions
+                self.proposals.append(OptimizationProposal(
+                    param="vm.max_map_count",
+                    current=curr_map,
+                    proposed="2147483642",
+                    reason="[GAMER] Steam oyunları için kritik bellek harita limiti (Crash önler).",
+                    category="gaming",
+                    priority="critical"
+                ))
+                
+            # Low Latency Scheduling
+            curr_slice = current_values.get("kernel.sched_cfs_bandwidth_slice_us", "5000")
+            if curr_slice != "3000":
+                self.proposals.append(OptimizationProposal(
+                     param="kernel.sched_cfs_bandwidth_slice_us",
+                     current=curr_slice,
+                     proposed="3000",
+                     reason="[GAMER] CPU zamanlayıcı gecikmesini düşürür (Daha akıcı oyun).",
+                     category="gaming",
+                     priority="recommended"
+                ))
+
+        if "Developer" in profiles:
+            # VSCode/Docker watch limit
+            curr_watch = current_values.get("fs.inotify.max_user_watches", "8192")
+            if int(curr_watch) < 524288:
+                self.proposals.append(OptimizationProposal(
+                    param="fs.inotify.max_user_watches",
+                    current=curr_watch,
+                    proposed="524288",
+                    reason="[DEV] IDE ve Docker için dosya izleme limitini artırır.",
+                    category="system",
+                    priority="recommended"
                 ))
         
         return self.proposals
@@ -1797,6 +1872,12 @@ class FedoraOptimizer:
             if active_features:
                 dna.append(f"[bold cyan]Kernel:[/] {' | '.join(active_features)}")
             dna.append(f"[bold cyan]  └─ THP:[/] {kf['transparent_hugepages']}")
+        
+        # Smart Profile
+        profiles = self.hw.detect_workload_profile()
+        profile_str = ", ".join(profiles)
+        color = "magenta" if "Gamer" in profiles else "blue" if "Developer" in profiles else "white"
+        dna.append(f"[bold cyan]KULLANIM TIPI:[/] [bold {color}]{profile_str}[/]")
         
         return dna
 

@@ -242,10 +242,10 @@ fedoraclean/
 
 ---
 
-### v0.2.3 (December 2025) - Development
+### v0.2.4 (December 2025) - Intelligence
+- 🧠 **Smart Profile Management**: Auto-detects Gamer/Dev/Server workloads
+- 🎯 **Targeted Optimizations**: Profile-specific sysctl tuning (e.g., Steam fixes)
 - 📊 **Deep DNA Reporting**: Visual progress bars and 100-point scoring system
-- 👷 **CI/CD**: Automated GitHub Releases (Stable)
-- 🚀 **2025 Kernel Tech**: BBRv3 detection, PSI metrics, sched_ext support
 - ✨ AI-Driven Optimization Workflow
 - ↩️ Transaction-Based Rollback System
 - 🔍 Universal Hardware Detection
