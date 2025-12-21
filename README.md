@@ -242,9 +242,8 @@ fedoraclean/
 
 ---
 
-## 🔄 Changelog
-
-### v0.2.2 (December 2025) - Production
+### v0.2.3 (December 2025) - Development
+- 📊 **Deep DNA Reporting**: Visual progress bars and 100-point scoring system
 - 👷 **CI/CD**: Automated GitHub Releases (Stable)
 - 🚀 **2025 Kernel Tech**: BBRv3 detection, PSI metrics, sched_ext support
 - ✨ AI-Driven Optimization Workflow

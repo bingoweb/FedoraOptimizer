@@ -2344,6 +2344,7 @@ class FedoraOptimizer:
             # PSI CPU Check
             cpu_psi = psi_stats.get("cpu", {}).get("some", {}).get("avg10", 0.0)
             if cpu_psi < 5.0:
+                scores["cpu"]["score"] += 5
                 scores["cpu"]["items"].append(("✓", f"CPU PSI: {cpu_psi}% (Düşük yük)"))
             else:
                 scores["cpu"]["items"].append(("!", f"CPU PSI: {cpu_psi}% (Yüksek yük)"))
@@ -2393,10 +2394,10 @@ class FedoraOptimizer:
             
             disk_type = self.hw.disk_info.lower()
             if "nvme" in disk_type:
-                scores["disk"]["score"] += 10
+                scores["disk"]["score"] += 5
                 scores["disk"]["items"].append(("✓", "NVMe SSD (maksimum hız)"))
             elif "ssd" in disk_type:
-                scores["disk"]["score"] += 7
+                scores["disk"]["score"] += 4
                 scores["disk"]["items"].append(("✓", "SATA SSD"))
             else:
                 scores["disk"]["score"] += 3
@@ -2422,6 +2423,7 @@ class FedoraOptimizer:
             # PSI I/O Check
             io_psi = psi_stats.get("io", {}).get("some", {}).get("avg10", 0.0)
             if io_psi < 5.0:
+                scores["disk"]["score"] += 5
                 scores["disk"]["items"].append(("✓", f"I/O PSI: {io_psi}% (Düşük yük)"))
             else:
                 scores["disk"]["items"].append(("!", f"I/O PSI: {io_psi}% (Yüksek yük)"))
@@ -2456,12 +2458,12 @@ class FedoraOptimizer:
             
             # PSI support
             if kf.get('psi', False):
-                scores["kernel"]["score"] += 3
+                scores["kernel"]["score"] += 2
                 scores["kernel"]["items"].append(("✓", "PSI (Pressure Stall Info) aktif"))
             
             # cgroup v2
             if kf.get('cgroup_v2', False):
-                scores["kernel"]["score"] += 3
+                scores["kernel"]["score"] += 2
                 scores["kernel"]["items"].append(("✓", "cgroup v2 (modern konteyner)"))
             
             # io_uring
@@ -2508,16 +2510,21 @@ class FedoraOptimizer:
             score_pct = int((data["score"] / data["max"]) * 100)
             score_color = "green" if score_pct >= 80 else "yellow" if score_pct >= 50 else "red"
             
+            # Progress Bar logic
+            bar_len = 20
+            filled = int((score_pct / 100) * bar_len)
+            bar = f"[{score_color}]{'█' * filled}[/][dim]{'░' * (bar_len - filled)}[/]"
+            
             items_text = "\n".join([
                 f"[{'green' if i[0]=='✓' else 'yellow' if i[0] in ['!','~'] else 'red'}]{i[0]}[/] {i[1]}" 
                 for i in data["items"]
             ])
             
             return Panel(
-                f"{items_text}\n\n[bold {score_color}]Skor: {data['score']}/{data['max']}[/]",
+                f"{items_text}\n\n{bar} [bold {score_color}]{data['score']}/{data['max']} ({score_pct}%)[/]",
                 title=f"[bold {color}]{emoji} {name}[/]",
                 border_style=color,
-                width=40
+                width=45
             )
         
         # Row 1: CPU and Memory
