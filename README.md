@@ -22,7 +22,7 @@
 ## 📦 Kurulum
 
 ```bash
-git clone https://github.com/bingoweb/fedoraclean.git
+git clone https://github.com/bingoweb/FedoraOptimizer.git
 cd fedoraclean
 chmod +x setup.sh run.sh
 ./setup.sh
