@@ -527,6 +527,468 @@ class HardwareDetector:
         return "Desktop"
 
 # ============================================================================
+# 2025 AI-DRIVEN OPTIMIZATION ENGINE
+# ============================================================================
+
+from dataclasses import dataclass
+from typing import List, Dict, Optional
+
+@dataclass
+class OptimizationProposal:
+    """Single optimization change with AI-generated explanation"""
+    param: str           # Parameter name (e.g., "vm.swappiness")
+    current: str         # Current value
+    proposed: str        # Proposed optimal value
+    reason: str          # WHY this change is needed (Turkish)
+    category: str        # "memory", "network", "scheduler", "disk", "boot"
+    priority: str        # "critical", "recommended", "optional"
+    command: str = ""    # Command to apply (for non-sysctl)
+    
+
+class AIOptimizationEngine:
+    """
+    AI-Driven Optimization Workflow Engine
+    
+    Pattern: SCAN → ANALYZE → EXPLAIN → CONFIRM → APPLY
+    
+    Tüm optimizasyonlar bu motoru kullanır:
+    1. Mevcut durumu tara
+    2. AI ile optimal değerleri hesapla
+    3. Değişiklikleri ve nedenlerini açıkla
+    4. Kullanıcı onayı al
+    5. Onaylanırsa uygula
+    """
+    
+    # Reason templates for different optimization types (Turkish)
+    REASONS = {
+        "swappiness_nvme": "NVMe SSD tespit edildi. Düşük swappiness (5-10) disk yerine RAM kullanımını önceliklendirir, çok daha hızlı erişim sağlar.",
+        "swappiness_ssd": "SATA SSD tespit edildi. Düşük swappiness (10-20) SSD ömrünü korur ve performansı artırır.",
+        "swappiness_hdd": "HDD tespit edildi. Varsayılan swappiness (60) mekanik diskler için uygundur.",
+        "bbr_enable": "TCP BBR algoritması, özellikle yüksek gecikmeli bağlantılarda %50'ye kadar daha hızlı transfer sağlar.",
+        "bbr_already": "TCP BBR zaten aktif. Ağ performansı optimal.",
+        "fastopen": "TCP Fast Open, bağlantı kurulum süresini azaltarak web sayfalarının daha hızlı yüklenmesini sağlar.",
+        "scheduler_nvme": "NVMe SSD için 'none' veya 'mq-deadline' scheduler önerilir. NVMe'nin dahili kuyruk yönetimi yeterlidir.",
+        "scheduler_ssd": "SATA SSD için 'bfq' veya 'mq-deadline' scheduler önerilir. Dengeli I/O önceliklendirmesi sağlar.",
+        "scheduler_hdd": "HDD için 'bfq' scheduler önerilir. Dönen disk erişimini optimize eder.",
+        "dirty_ratio": "Bellek dirty ratio azaltıldığında, veriler diske daha sık yazılır. SSD'ler için düşük değer performansı artırır.",
+        "governor_performance": "CPU governor 'performance' modu, CPU'yu sürekli maksimum frekansta tutar. Oyun ve yoğun iş yükleri için önerilir.",
+        "governor_powersave": "CPU governor 'powersave' modu aktif. Pil ömrü için iyi ama performans düşük olabilir.",
+        "trim_disabled": "TRIM aktif değil! SSD performansı ve ömrü için TRIM kritik öneme sahiptir.",
+        "trim_enabled": "TRIM zaten aktif. SSD bakımı optimal.",
+        "noatime_btrfs": "Btrfs dosya sistemi için 'noatime' mount seçeneği önerilir. Gereksiz yazma işlemlerini %20-30 azaltır.",
+        "zram_disabled": "ZRAM aktif değil. ZRAM, RAM'i sıkıştırarak etkin bellek kapasitesini artırır.",
+        "zram_enabled": "ZRAM zaten aktif. Bellek yönetimi optimal.",
+        "hybrid_itmt": "Intel Hybrid CPU (P+E çekirdek) tespit edildi. Thread Director etkinleştirilmeli.",
+        "amd_pstate": "AMD Zen işlemci tespit edildi. amd_pstate EPP aktif, optimal ayarlarda.",
+        "sched_latency": "Scheduler parametreleri masaüstü kullanımı için optimize edilmeli. Düşük latency, daha duyarlı sistem.",
+    }
+    
+    def __init__(self, hw_detector: 'HardwareDetector'):
+        self.hw = hw_detector
+        self.proposals: List[OptimizationProposal] = []
+    
+    def scan_current_sysctl(self, params: List[str]) -> Dict[str, str]:
+        """Scan current sysctl values for given parameters"""
+        current = {}
+        for param in params:
+            s, out, _ = run_command(f"sysctl -n {param} 2>/dev/null")
+            if s:
+                current[param] = out.strip()
+            else:
+                current[param] = "N/A"
+        return current
+    
+    def scan_current_state(self) -> Dict:
+        """Full system state scan"""
+        state = {
+            "disk_type": self._detect_disk_type(),
+            "chassis": self.hw.chassis.lower(),
+            "cpu_vendor": self.hw.cpu_microarch.get("vendor", "Unknown"),
+            "cpu_hybrid": self.hw.cpu_microarch.get("hybrid", False),
+            "kernel_version": self.hw.kernel_features.get("kernel_version", "Unknown"),
+            "governor": self.hw.cpu_microarch.get("governor", "Unknown"),
+            "bbr_active": False,
+            "trim_active": False,
+            "zram_active": self.hw.kernel_features.get("zram", False),
+            "btrfs_noatime": self.hw.kernel_features.get("btrfs_noatime", False),
+        }
+        
+        # Check BBR
+        s, out, _ = run_command("sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null")
+        state["bbr_active"] = s and "bbr" in out.lower()
+        
+        # Check TRIM
+        s, out, _ = run_command("systemctl is-enabled fstrim.timer 2>/dev/null")
+        state["trim_active"] = "enabled" in out
+        
+        return state
+    
+    def _detect_disk_type(self) -> str:
+        disk = self.hw.disk_info.lower()
+        if "nvme" in disk:
+            return "nvme"
+        elif "ssd" in disk:
+            return "ssd"
+        return "hdd"
+    
+    def analyze_and_propose_sysctl(self, persona: str = "general") -> List[OptimizationProposal]:
+        """Analyze current state and generate optimization proposals"""
+        self.proposals = []
+        state = self.scan_current_state()
+        disk_type = state["disk_type"]
+        
+        # Key parameters to analyze
+        params_to_check = [
+            "vm.swappiness",
+            "vm.dirty_ratio",
+            "vm.dirty_background_ratio",
+            "net.ipv4.tcp_congestion_control",
+            "net.ipv4.tcp_fastopen",
+            "net.core.rmem_max",
+            "kernel.sched_autogroup_enabled",
+        ]
+        
+        current_values = self.scan_current_sysctl(params_to_check)
+        
+        # === VM.SWAPPINESS ===
+        current_swp = current_values.get("vm.swappiness", "60")
+        if disk_type == "nvme":
+            optimal_swp = "5"
+            reason = self.REASONS["swappiness_nvme"]
+        elif disk_type == "ssd":
+            optimal_swp = "10"
+            reason = self.REASONS["swappiness_ssd"]
+        else:
+            optimal_swp = "60"
+            reason = self.REASONS["swappiness_hdd"]
+        
+        if current_swp != optimal_swp:
+            self.proposals.append(OptimizationProposal(
+                param="vm.swappiness",
+                current=current_swp,
+                proposed=optimal_swp,
+                reason=reason,
+                category="memory",
+                priority="recommended"
+            ))
+        
+        # === TCP CONGESTION CONTROL (BBR) ===
+        current_cc = current_values.get("net.ipv4.tcp_congestion_control", "cubic")
+        if "bbr" not in current_cc.lower():
+            self.proposals.append(OptimizationProposal(
+                param="net.ipv4.tcp_congestion_control",
+                current=current_cc,
+                proposed="bbr",
+                reason=self.REASONS["bbr_enable"],
+                category="network",
+                priority="recommended"
+            ))
+        
+        # === TCP FAST OPEN ===
+        current_tfo = current_values.get("net.ipv4.tcp_fastopen", "1")
+        if current_tfo != "3":
+            self.proposals.append(OptimizationProposal(
+                param="net.ipv4.tcp_fastopen",
+                current=current_tfo,
+                proposed="3",
+                reason=self.REASONS["fastopen"],
+                category="network",
+                priority="optional"
+            ))
+        
+        # === DIRTY RATIO (if SSD/NVMe) ===
+        if disk_type in ["nvme", "ssd"]:
+            current_dirty = current_values.get("vm.dirty_ratio", "20")
+            optimal_dirty = "5" if disk_type == "nvme" else "10"
+            if int(current_dirty) > int(optimal_dirty):
+                self.proposals.append(OptimizationProposal(
+                    param="vm.dirty_ratio",
+                    current=current_dirty,
+                    proposed=optimal_dirty,
+                    reason=self.REASONS["dirty_ratio"],
+                    category="memory",
+                    priority="recommended"
+                ))
+        
+        # === SCHEDULER AUTOGROUP ===
+        current_ag = current_values.get("kernel.sched_autogroup_enabled", "0")
+        if current_ag == "0" and state["chassis"] == "desktop":
+            self.proposals.append(OptimizationProposal(
+                param="kernel.sched_autogroup_enabled",
+                current="0",
+                proposed="1",
+                reason=self.REASONS["sched_latency"],
+                category="scheduler",
+                priority="recommended"
+            ))
+        
+        # === TRIM CHECK ===
+        if disk_type in ["nvme", "ssd"] and not state["trim_active"]:
+            self.proposals.append(OptimizationProposal(
+                param="fstrim.timer",
+                current="disabled",
+                proposed="enabled",
+                reason=self.REASONS["trim_disabled"],
+                category="disk",
+                priority="critical",
+                command="systemctl enable --now fstrim.timer"
+            ))
+        
+        # === ZRAM CHECK ===
+        if not state["zram_active"]:
+            self.proposals.append(OptimizationProposal(
+                param="ZRAM",
+                current="disabled",
+                proposed="enabled",
+                reason=self.REASONS["zram_disabled"],
+                category="memory",
+                priority="optional",
+                command="dnf install -y zram-generator && systemctl enable --now zram-generator"
+            ))
+        
+        return self.proposals
+    
+    def analyze_network_only(self) -> List[OptimizationProposal]:
+        """Analyze only network-related parameters"""
+        self.proposals = []
+        
+        network_params = [
+            "net.ipv4.tcp_congestion_control",
+            "net.ipv4.tcp_fastopen",
+            "net.core.rmem_max",
+            "net.core.wmem_max",
+            "net.ipv4.tcp_mtu_probing",
+            "net.ipv4.tcp_ecn",
+        ]
+        
+        current = self.scan_current_sysctl(network_params)
+        
+        # BBR Check
+        cc = current.get("net.ipv4.tcp_congestion_control", "cubic")
+        if "bbr" not in cc.lower():
+            self.proposals.append(OptimizationProposal(
+                param="net.ipv4.tcp_congestion_control",
+                current=cc,
+                proposed="bbr",
+                reason=self.REASONS["bbr_enable"],
+                category="network",
+                priority="recommended"
+            ))
+        
+        # TCP Fast Open
+        tfo = current.get("net.ipv4.tcp_fastopen", "0")
+        if tfo != "3":
+            self.proposals.append(OptimizationProposal(
+                param="net.ipv4.tcp_fastopen",
+                current=tfo,
+                proposed="3",
+                reason=self.REASONS["fastopen"],
+                category="network",
+                priority="recommended"
+            ))
+        
+        # Buffer sizes (for high-bandwidth connections)
+        rmem = current.get("net.core.rmem_max", "212992")
+        if int(rmem) < 16777216:
+            self.proposals.append(OptimizationProposal(
+                param="net.core.rmem_max",
+                current=rmem,
+                proposed="16777216",
+                reason="Büyük alım buffer'ı yüksek bant genişliğinde indirme hızını artırır. Özellikle 100+ Mbps bağlantılarda etkilidir.",
+                category="network",
+                priority="optional"
+            ))
+        
+        wmem = current.get("net.core.wmem_max", "212992")
+        if int(wmem) < 16777216:
+            self.proposals.append(OptimizationProposal(
+                param="net.core.wmem_max",
+                current=wmem,
+                proposed="16777216",
+                reason="Büyük gönderim buffer'ı yüksek bant genişliğinde yükleme hızını artırır.",
+                category="network",
+                priority="optional"
+            ))
+        
+        # MTU Probing (for better throughput)
+        mtu = current.get("net.ipv4.tcp_mtu_probing", "0")
+        if mtu == "0":
+            self.proposals.append(OptimizationProposal(
+                param="net.ipv4.tcp_mtu_probing",
+                current=mtu,
+                proposed="1",
+                reason="MTU probing, ağ yolundaki en uygun paket boyutunu otomatik algılar. Daha verimli veri transferi sağlar.",
+                category="network",
+                priority="optional"
+            ))
+        
+        return self.proposals
+    
+    def analyze_io_scheduler(self) -> List[OptimizationProposal]:
+        """Analyze I/O scheduler proposals for all block devices"""
+        self.proposals = []
+        disk_type = self._detect_disk_type()
+        
+        # Get current schedulers
+        s, out, _ = run_command("lsblk -d -o NAME,TYPE,TRAN 2>/dev/null")
+        if not s:
+            return self.proposals
+        
+        for line in out.strip().split('\n')[1:]:
+            parts = line.split()
+            if len(parts) >= 2:
+                dev = parts[0]
+                trans = parts[2] if len(parts) > 2 else ""
+                
+                # Get current scheduler
+                sched_path = f"/sys/block/{dev}/queue/scheduler"
+                s2, sched_out, _ = run_command(f"cat {sched_path} 2>/dev/null")
+                if not s2:
+                    continue
+                
+                # Parse current scheduler (marked with [brackets])
+                current_sched = "unknown"
+                for s in sched_out.strip().split():
+                    if s.startswith('[') and s.endswith(']'):
+                        current_sched = s[1:-1]
+                        break
+                
+                # Determine optimal scheduler
+                if "nvme" in trans or "nvme" in dev:
+                    optimal = "none"
+                    reason = self.REASONS["scheduler_nvme"]
+                elif trans == "sata" and disk_type == "ssd":
+                    optimal = "mq-deadline"
+                    reason = self.REASONS["scheduler_ssd"]
+                else:
+                    optimal = "bfq"
+                    reason = self.REASONS["scheduler_hdd"]
+                
+                if current_sched != optimal:
+                    self.proposals.append(OptimizationProposal(
+                        param=f"I/O Scheduler ({dev})",
+                        current=current_sched,
+                        proposed=optimal,
+                        reason=reason,
+                        category="disk",
+                        priority="recommended",
+                        command=f"echo {optimal} > {sched_path}"
+                    ))
+        
+        return self.proposals
+
+    
+    def display_proposals(self) -> None:
+        """Display proposals in a formatted table with explanations"""
+        if not self.proposals:
+            console.print("[green]✓ Tüm ayarlar zaten optimal! Değişiklik gerekmez.[/green]")
+            return
+        
+        # Group by category
+        categories = {}
+        for p in self.proposals:
+            if p.category not in categories:
+                categories[p.category] = []
+            categories[p.category].append(p)
+        
+        category_names = {
+            "memory": "🧠 Bellek",
+            "network": "🌐 Ağ",
+            "scheduler": "⚡ Zamanlayıcı",
+            "disk": "💾 Disk",
+            "boot": "🚀 Açılış"
+        }
+        
+        priority_colors = {
+            "critical": "red",
+            "recommended": "yellow",
+            "optional": "dim"
+        }
+        
+        console.print("\n[bold cyan]🧠 AI OPTİMİZASYON ÖNERİLERİ[/bold cyan]\n")
+        
+        for cat, proposals in categories.items():
+            cat_name = category_names.get(cat, cat.title())
+            console.print(f"[bold]{cat_name}[/bold]")
+            
+            table = Table(box=None, padding=(0, 1), expand=True)
+            table.add_column("Parametre", style="cyan", width=28)
+            table.add_column("Mevcut", style="red", width=10)
+            table.add_column("Önerilen", style="green", width=10)
+            table.add_column("Öncelik", width=10)
+            
+            for p in proposals:
+                prio_color = priority_colors.get(p.priority, "white")
+                prio_text = {"critical": "🔴 Kritik", "recommended": "🟡 Önerilen", "optional": "⚪ İsteğe Bağlı"}.get(p.priority, p.priority)
+                table.add_row(p.param, p.current, p.proposed, f"[{prio_color}]{prio_text}[/]")
+            
+            console.print(table)
+            
+            # Show reasons
+            for p in proposals:
+                console.print(f"  [dim]→ {p.reason}[/dim]")
+            
+            console.print()
+    
+    def apply_proposals(self, backup_first: bool = True) -> List[str]:
+        """Apply approved proposals and return list of applied changes"""
+        applied = []
+        
+        if backup_first:
+            try:
+                backup = OptimizationBackup()
+                backup.create_snapshot()
+                console.print("[green]✓ Yedek oluşturuldu.[/green]")
+            except:
+                pass
+        
+        for p in self.proposals:
+            try:
+                if p.command:
+                    # Custom command (e.g., systemctl)
+                    s, _, err = run_command(p.command, sudo=True)
+                    if s:
+                        applied.append(f"{p.param}: {p.current} → {p.proposed}")
+                        console.print(f"[green]✓ {p.param} uygulandı[/green]")
+                    else:
+                        console.print(f"[red]✗ {p.param} hatası: {err}[/red]")
+                else:
+                    # Sysctl parameter
+                    s, _, err = run_command(f"sysctl -w {p.param}={p.proposed}", sudo=True)
+                    if s:
+                        applied.append(f"{p.param}: {p.current} → {p.proposed}")
+                        console.print(f"[green]✓ {p.param} = {p.proposed}[/green]")
+                    else:
+                        console.print(f"[red]✗ {p.param} hatası: {err}[/red]")
+            except Exception as e:
+                console.print(f"[red]Hata: {e}[/red]")
+        
+        # Persist sysctl changes
+        if applied:
+            self._persist_sysctl_changes()
+        
+        return applied
+    
+    def _persist_sysctl_changes(self):
+        """Save sysctl changes to config file for persistence"""
+        conf_file = "/etc/sysctl.d/99-fedoraclean-ai.conf"
+        lines = []
+        
+        for p in self.proposals:
+            if not p.command:  # Only sysctl params
+                lines.append(f"# {p.reason[:60]}...")
+                lines.append(f"{p.param} = {p.proposed}")
+        
+        if lines:
+            try:
+                content = "# Fedora Optimizer - AI Generated Config\n" + "\n".join(lines) + "\n"
+                with open(conf_file, "a") as f:
+                    f.write(content)
+            except:
+                pass
+
+
+# ============================================================================
 # 2025 ADVANCED OPTIMIZATION ENGINES
 # ============================================================================
 

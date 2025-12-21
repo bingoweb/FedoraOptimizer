@@ -25,7 +25,8 @@ from modules.optimizer import (
     HardwareDetector,
     SysctlOptimizer, 
     IOSchedulerOptimizer, 
-    OptimizationBackup
+    OptimizationBackup,
+    AIOptimizationEngine
 )
 from modules.gaming import GamingOptimizer
 from modules.logger import log_info, log_exception, get_log_path
@@ -162,11 +163,26 @@ class OptimizerApp:
         
         elif key == '2':
             def quick_opt():
-                console.print("[bold cyan]⚡ Hızlı Optimizasyon...[/bold cyan]\n")
-                optimizer.apply_dnf5_optimizations()
-                optimizer.optimize_boot_profile()
-                optimizer.trim_ssd()
-                console.print("\n[green]✓ Hızlı optimizasyon tamamlandı![/green]")
+                console.print("[bold cyan]⚡ AI-Driven Hızlı Optimizasyon[/bold cyan]\n")
+                console.print("[dim]🔍 Sistem taranıyor...[/dim]")
+                
+                # Use AI Engine
+                ai_engine = AIOptimizationEngine(optimizer.hw)
+                proposals = ai_engine.analyze_and_propose_sysctl()
+                
+                if not proposals:
+                    console.print("\n[green]✓ Tüm ayarlar zaten optimal! Değişiklik gerekmez.[/green]")
+                    return
+                
+                # Display proposals
+                ai_engine.display_proposals()
+                
+                # Ask for confirmation
+                if Confirm.ask("\n[bold yellow]Bu değişiklikleri uygulamak istiyor musunuz?[/bold yellow]"):
+                    applied = ai_engine.apply_proposals()
+                    console.print(f"\n[green]✓ {len(applied)} değişiklik uygulandı![/green]")
+                else:
+                    console.print("\n[dim]İptal edildi. Değişiklik yapılmadı.[/dim]")
             self.pause_and_run(live, quick_opt)
         
         elif key == '3':
@@ -177,32 +193,73 @@ class OptimizerApp:
         
         elif key == '5':
             def io_opt():
-                console.print("[bold cyan]💾 I/O Zamanlayıcı Optimizasyonu...[/bold cyan]\n")
-                io_optimizer = IOSchedulerOptimizer(optimizer.hw)
-                results = io_optimizer.optimize_all_devices()
-                for r in results:
-                    if r.get('status') == 'changed':
-                        console.print(f"[green]✓ {r['device']} ({r['category']}): {r['from']} → {r['to']}[/green]")
-                    else:
-                        console.print(f"[dim]• {r['device']}: {r.get('scheduler', 'N/A')} (optimal)[/dim]")
+                console.print("[bold cyan]💾 AI I/O Zamanlayıcı Analizi[/bold cyan]\n")
+                console.print("[dim]🔍 Disk cihazları taranıyor...[/dim]")
+                
+                ai_engine = AIOptimizationEngine(optimizer.hw)
+                proposals = ai_engine.analyze_io_scheduler()
+                
+                if not proposals:
+                    console.print("\n[green]✓ Tüm disk zamanlayıcıları optimal! Değişiklik gerekmez.[/green]")
+                    return
+                
+                ai_engine.display_proposals()
+                
+                if Confirm.ask("\n[bold yellow]Bu zamanlayıcı değişikliklerini uygulamak istiyor musunuz?[/bold yellow]"):
+                    applied = ai_engine.apply_proposals()
+                    console.print(f"\n[green]✓ {len(applied)} disk zamanlayıcısı optimize edildi![/green]")
+                else:
+                    console.print("\n[dim]İptal edildi. Değişiklik yapılmadı.[/dim]")
             self.pause_and_run(live, io_opt)
         
         elif key == '6':
-            self.pause_and_run(live, optimizer.optimize_network)
+            def net_opt():
+                console.print("[bold cyan]🌐 AI Ağ Optimizasyonu Analizi[/bold cyan]\n")
+                console.print("[dim]🔍 Ağ parametreleri taranıyor...[/dim]")
+                
+                ai_engine = AIOptimizationEngine(optimizer.hw)
+                proposals = ai_engine.analyze_network_only()
+                
+                if not proposals:
+                    console.print("\n[green]✓ Ağ ayarları zaten optimal! (BBR aktif, buffer'lar yeterli)[/green]")
+                    return
+                
+                ai_engine.display_proposals()
+                
+                if Confirm.ask("\n[bold yellow]Bu ağ optimizasyonlarını uygulamak istiyor musunuz?[/bold yellow]"):
+                    applied = ai_engine.apply_proposals()
+                    console.print(f"\n[green]✓ {len(applied)} ağ parametresi optimize edildi![/green]")
+                else:
+                    console.print("\n[dim]İptal edildi. Değişiklik yapılmadı.[/dim]")
+            self.pause_and_run(live, net_opt)
         
         elif key == '7':
             def kernel_opt():
-                console.print("[bold cyan]🔧 Kernel Parametreleri Uygulanıyor...[/bold cyan]\n")
-                persona, _ = optimizer.analyze_usage_persona()
-                sysctl_opt = SysctlOptimizer(optimizer.hw)
-                tweaks = sysctl_opt.generate_optimized_config(persona)
-                applied = sysctl_opt.apply_config(tweaks)
-                if applied:
-                    console.print(f"\n[green]✓ {len(applied)} parametre optimize edildi.[/green]")
-                    for key, val in applied[:10]:
-                        console.print(f"  • {key} = {val}")
+                console.print("[bold cyan]🔧 AI Kernel Parametreleri Analizi[/bold cyan]\n")
+                console.print("[dim]🔍 Mevcut kernel ayarları taranıyor...[/dim]")
+                
+                # Use AI Engine for analysis
+                ai_engine = AIOptimizationEngine(optimizer.hw)
+                proposals = ai_engine.analyze_and_propose_sysctl()
+                
+                if not proposals:
+                    console.print("\n[green]✓ Tüm kernel parametreleri optimal! Değişiklik gerekmez.[/green]")
+                    
+                    # Still show current state for info
+                    persona, _ = optimizer.analyze_usage_persona()
+                    console.print(f"\n[dim]Algılanan profil: {persona}[/dim]")
+                    return
+                
+                # Display proposals with explanations
+                ai_engine.display_proposals()
+                
+                # Ask for confirmation
+                if Confirm.ask("\n[bold yellow]Bu kernel parametrelerini uygulamak istiyor musunuz?[/bold yellow]"):
+                    applied = ai_engine.apply_proposals()
+                    console.print(f"\n[green]✓ {len(applied)} kernel parametresi optimize edildi![/green]")
+                    console.print("[dim]Değişiklikler kalıcı olarak /etc/sysctl.d/ altına kaydedildi.[/dim]")
                 else:
-                    console.print("[dim]Tüm parametreler zaten optimal.[/dim]")
+                    console.print("\n[dim]İptal edildi. Hiçbir değişiklik yapılmadı.[/dim]")
             self.pause_and_run(live, kernel_opt)
         
         elif key == '8':
