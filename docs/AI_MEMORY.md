@@ -72,6 +72,11 @@ class OptimizationProposal:
   - **Intel Hybrid:** Enforces `sched_itmt` (Thread Director).
   - **AMD Zen:** Checks `amd_pstate` status.
 
+### Area 5: Modular Refactoring (v0.3.0)
+- **New Architecture:** Monolithic `optimizer.py` split into `src/modules/optimizer/` package.
+- **Code Quality:** Pylint score **9.21/10**.
+- **Components:** `hardware.py`, `engine.py`, `sysctl.py`, `models.py`, `facade.py`.
+
 ---
 
 ## 🔄 Deployment & CI/CD

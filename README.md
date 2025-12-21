@@ -195,12 +195,12 @@ sudo ./run.sh
 fedoraclean/
 ├── src/
 │   ├── modules/
-│   │   ├── optimizer.py      # Core optimization engine
-│   │   │   ├── HardwareDetector      # Universal hardware detection
-│   │   │   ├── AIOptimizationEngine  # AI-driven proposals
-│   │   │   ├── TransactionManager    # Rollback system
-│   │   │   ├── SysctlOptimizer       # Kernel parameters
-│   │   │   └── IOSchedulerOptimizer  # Disk scheduler
+│   │   ├── optimizer/        # Core optimization package
+│   │   │   ├── facade.py     # Main interface (FedoraOptimizer)
+│   │   │   ├── hardware.py   # Universal hardware detection
+│   │   │   ├── engine.py     # AI-driven proposals
+│   │   │   ├── sysctl.py     # Kernel parameters
+│   │   │   └── ...           # (models, backup, etc.)
 │   │   ├── gaming.py         # Gaming optimizations
 │   │   ├── utils.py          # Utilities and helpers
 │   │   └── logger.py         # Logging system
