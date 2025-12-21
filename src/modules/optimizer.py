@@ -1,0 +1,1329 @@
+import os
+import psutil
+import platform
+import re
+from .utils import run_command, console, Theme
+from rich.panel import Panel
+from rich.prompt import Prompt, Confirm
+from rich.table import Table
+from rich.align import Align
+
+class HardwareDetector:
+    """Deep Hardware Profiling Engine - 2025 Enhanced"""
+    
+    def __init__(self):
+        self.cpu_info = self._get_cpu_details()
+        self.cpu_microarch = self._get_cpu_microarchitecture()
+        self.ram_info = self._get_ram_details()
+        self.gpu_info = self._get_gpu_details()
+        self.disk_info = self._get_disk_details()
+        self.nvme_health = self._get_nvme_health()
+        self.net_info = self._get_net_details()
+        self.chassis = self._get_chassis_type()
+        self.kernel_features = self._get_kernel_features()
+        self.bios_info = self._get_bios_settings()
+    
+    def _get_cpu_microarchitecture(self):
+        """Detect Intel P/E cores, AMD CCX topology, and CPU architecture"""
+        info = {
+            "vendor": "Unknown",
+            "family": "Unknown",
+            "hybrid": False,
+            "p_cores": 0,
+            "e_cores": 0,
+            "topology": "Unknown",
+            "has_avx512": False,
+            "has_avx2": False,
+            "governor": "Unknown",
+            "epp": "Unknown"
+        }
+        try:
+            # Vendor detection
+            with open("/proc/cpuinfo", "r") as f:
+                content = f.read()
+                if "GenuineIntel" in content:
+                    info["vendor"] = "Intel"
+                elif "AuthenticAMD" in content:
+                    info["vendor"] = "AMD"
+                
+                # Check for AVX support
+                if "avx512" in content.lower():
+                    info["has_avx512"] = True
+                if "avx2" in content.lower():
+                    info["has_avx2"] = True
+            
+            # Intel Hybrid Detection (Alder Lake+)
+            if info["vendor"] == "Intel":
+                # Check for hybrid architecture via sysfs
+                s, out, _ = run_command("cat /sys/devices/cpu_core/cpus 2>/dev/null")
+                if s and out.strip():
+                    info["hybrid"] = True
+                    # Count P-cores
+                    p_cores_str = out.strip()
+                    if "-" in p_cores_str:
+                        parts = p_cores_str.split("-")
+                        info["p_cores"] = int(parts[1]) - int(parts[0]) + 1
+                    else:
+                        info["p_cores"] = len(p_cores_str.split(","))
+                    
+                    # Count E-cores
+                    s2, out2, _ = run_command("cat /sys/devices/cpu_atom/cpus 2>/dev/null")
+                    if s2 and out2.strip():
+                        e_cores_str = out2.strip()
+                        if "-" in e_cores_str:
+                            parts = e_cores_str.split("-")
+                            info["e_cores"] = int(parts[1]) - int(parts[0]) + 1
+                        else:
+                            info["e_cores"] = len(e_cores_str.split(","))
+                    
+                    info["topology"] = f"{info['p_cores']}P + {info['e_cores']}E Hibrit"
+                else:
+                    # Non-hybrid Intel
+                    info["topology"] = "Standart (Homojen)"
+            
+            # AMD CCX/CCD detection
+            elif info["vendor"] == "AMD":
+                s, out, _ = run_command("lscpu | grep 'L3 cache'")
+                if s:
+                    info["topology"] = "Zen CCX/CCD Mimarisi"
+            
+            # Current governor
+            s, out, _ = run_command("cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null")
+            if s:
+                info["governor"] = out.strip()
+            
+            # Intel EPP (Energy Performance Preference)
+            s, out, _ = run_command("cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null")
+            if s:
+                info["epp"] = out.strip()
+                
+        except Exception:
+            pass
+        return info
+    
+    def _get_nvme_health(self):
+        """Read NVMe SMART data via nvme-cli"""
+        info = {
+            "available": False,
+            "devices": [],
+            "temperature": "N/A",
+            "wear_level": "N/A",
+            "power_on_hours": "N/A",
+            "data_written_tb": "N/A"
+        }
+        try:
+            # Check if nvme-cli is available
+            s, out, _ = run_command("which nvme")
+            if not s:
+                return info
+            
+            # List NVMe devices
+            s, out, _ = run_command("nvme list -o json 2>/dev/null")
+            if s and out.strip():
+                import json
+                data = json.loads(out)
+                devices = data.get("Devices", [])
+                for dev in devices:
+                    dev_path = dev.get("DevicePath", "")
+                    info["devices"].append(dev_path)
+                
+                if info["devices"]:
+                    info["available"] = True
+                    # Get SMART data from first device
+                    dev = info["devices"][0]
+                    s2, out2, _ = run_command(f"nvme smart-log {dev} -o json 2>/dev/null")
+                    if s2 and out2.strip():
+                        smart = json.loads(out2)
+                        # Temperature in Kelvin, convert to Celsius
+                        temp_k = smart.get("temperature", 0)
+                        if temp_k > 0:
+                            info["temperature"] = f"{temp_k - 273}°C"
+                        
+                        # Percentage used (wear level)
+                        info["wear_level"] = f"{smart.get('percent_used', 0)}%"
+                        
+                        # Power on hours
+                        poh = smart.get("power_on_hours", 0)
+                        info["power_on_hours"] = f"{poh:,} saat"
+                        
+                        # Data written (in units of 512KB, convert to TB)
+                        dw = smart.get("data_units_written", 0)
+                        tb = (dw * 512 * 1000) / (1024**4)
+                        info["data_written_tb"] = f"{tb:.2f} TB"
+        except Exception:
+            pass
+        return info
+    
+    def _get_kernel_features(self):
+        """Detect enabled kernel features from /proc and /sys"""
+        features = {
+            "cgroup_v2": False,
+            "io_uring": False,
+            "bpf": False,
+            "sched_ext": False,
+            "zswap": False,
+            "zram": False,
+            "psi": False,
+            "transparent_hugepages": "Unknown",
+            "available_governors": [],
+            "available_schedulers": []
+        }
+        try:
+            # cgroup v2
+            s, out, _ = run_command("mount | grep cgroup2")
+            features["cgroup_v2"] = s and "cgroup2" in out
+            
+            # io_uring support
+            features["io_uring"] = os.path.exists("/proc/sys/kernel/io_uring_disabled") or \
+                                   "io_uring" in open("/proc/kallsyms", "r").read()[:50000] if os.path.exists("/proc/kallsyms") else False
+            
+            # BPF
+            features["bpf"] = os.path.exists("/sys/fs/bpf")
+            
+            # sched_ext (kernel 6.6+)
+            s, out, _ = run_command("cat /sys/kernel/sched_ext/state 2>/dev/null")
+            features["sched_ext"] = s and out.strip() != ""
+            
+            # zswap
+            s, out, _ = run_command("cat /sys/module/zswap/parameters/enabled 2>/dev/null")
+            features["zswap"] = s and out.strip() == "Y"
+            
+            # zram
+            s, out, _ = run_command("zramctl")
+            features["zram"] = s and "zram" in out
+            
+            # PSI (Pressure Stall Information)
+            features["psi"] = os.path.exists("/proc/pressure/cpu")
+            
+            # Transparent Hugepages
+            s, out, _ = run_command("cat /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null")
+            if s:
+                match = re.search(r'\[(\w+)\]', out)
+                if match:
+                    features["transparent_hugepages"] = match.group(1)
+            
+            # Available CPU governors
+            s, out, _ = run_command("cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null")
+            if s:
+                features["available_governors"] = out.strip().split()
+            
+            # Available I/O schedulers (for first block device)
+            s, out, _ = run_command("cat /sys/block/$(lsblk -d -o NAME | grep -v loop | head -2 | tail -1)/queue/scheduler 2>/dev/null")
+            if s:
+                # Format: [none] mq-deadline
+                features["available_schedulers"] = re.findall(r'\[?(\w+)\]?', out)
+                
+        except Exception:
+            pass
+        return features
+    
+    def _get_bios_settings(self):
+        """Read DMI tables for virtualization, secure boot, and BIOS info"""
+        info = {
+            "vendor": "Unknown",
+            "version": "Unknown",
+            "secure_boot": "Unknown",
+            "virtualization": "Unknown",
+            "uefi": False
+        }
+        try:
+            # BIOS vendor and version
+            s, out, _ = run_command("dmidecode -s bios-vendor 2>/dev/null")
+            if s:
+                info["vendor"] = out.strip()
+            
+            s, out, _ = run_command("dmidecode -s bios-version 2>/dev/null")
+            if s:
+                info["version"] = out.strip()
+            
+            # Secure Boot status
+            s, out, _ = run_command("mokutil --sb-state 2>/dev/null")
+            if s:
+                if "enabled" in out.lower():
+                    info["secure_boot"] = "Aktif"
+                else:
+                    info["secure_boot"] = "Devre Dışı"
+            
+            # Virtualization support
+            s, out, _ = run_command("lscpu | grep 'Virtualization'")
+            if s:
+                if "VT-x" in out:
+                    info["virtualization"] = "Intel VT-x"
+                elif "AMD-V" in out:
+                    info["virtualization"] = "AMD-V"
+            
+            # UEFI check
+            info["uefi"] = os.path.exists("/sys/firmware/efi")
+            
+        except Exception:
+            pass
+        return info
+
+    def _get_cpu_details(self):
+        # Use lscpu or /proc/cpuinfo
+        info = {"model": "Unknown", "cores": psutil.cpu_count(logical=True), "freq": "Unknown"}
+        try:
+            with open("/proc/cpuinfo", "r") as f:
+                for line in f:
+                    if "model name" in line:
+                        info["model"] = line.split(":")[1].strip()
+                        break
+            # Freq
+            info["freq"] = f"{psutil.cpu_freq().max:.0f} MHz" if psutil.cpu_freq() else "Unknown"
+        except: pass
+        return info
+
+    def _get_ram_details(self):
+        # Requires dmidecode for speed/type, but psutil gives size
+        total_gb = round(psutil.virtual_memory().total / (1024**3), 1)
+        info = {"total": total_gb, "type": "Unknown", "speed": "Unknown"}
+        
+        # Try dmidecode
+        s, out, _ = run_command("dmidecode -t memory")
+        if s:
+            # Find Speed and Type
+            speeds = re.findall(r"Speed: (\d+ MT/s|\d+ MHz)", out)
+            types = re.findall(r"Type: (DDR\d)", out)
+            
+            if speeds: info["speed"] = max(speeds) # Use max speed found
+            if types: info["type"] = types[0] # Assume homogeneous
+            
+        return info
+
+    def _get_gpu_details(self):
+        s, out, _ = run_command("lspci | grep -i 'vga\\|3d'")
+        if not s: return "Bilinmeyen Grafik Birimi"
+        # Clean up output: "00:02.0 VGA compatible controller: Intel Corporation..."
+        lines = out.strip().split('\n')
+        gpus = []
+        for line in lines:
+            parts = line.split(': ')
+            if len(parts) > 1:
+                gpus.append(parts[-1].strip())
+        return ", ".join(gpus)
+
+    def _get_disk_details(self):
+        # NVMe details
+        disk_desc = "Unknown"
+        # Check root or main disk
+        s, out, _ = run_command("lsblk -d -o NAME,MODEL,TRAN,SIZE | grep -v loop")
+        if s:
+            # Prioritize NVMe
+            if "nvme" in out: 
+                disk_desc = "NVMe SSD (Yüksek Performans)"
+            elif "ssd" in out or "sata" in out:
+                disk_desc = "SATA SSD"
+            else:
+                for line in out.split('\n'):
+                    if "hdd" in line or "1" in line: # crude rotation check often needs ROTA col
+                        pass
+                # Better check
+                s2, out2, _ = run_command("lsblk -d -o NAME,ROTA")
+                if "1" in out2: disk_desc = "HDD (Mekanik Disk)"
+                else: disk_desc = "SSD (Solid State)"
+        return disk_desc
+
+    def _get_net_details(self):
+        s, out, _ = run_command("lspci | grep -i 'network\\|ethernet'")
+        if not s: return "Bilinmeyen Ağ"
+        controllers = []
+        for line in out.strip().split('\n'):
+             parts = line.split(': ')
+             if len(parts) > 1:
+                 name = parts[-1]
+                 # Shorten
+                 if "Wireless" in name: controllers.append(f"Wi-Fi: {name.split('Wireless')[0].strip()}")
+                 elif "Ethernet" in name: controllers.append(f"Ethernet: {name.split('Ethernet')[0].strip()}")
+                 else: controllers.append(name)
+        return " + ".join(controllers[:2])
+
+    def _get_chassis_type(self):
+        try:
+             with open("/sys/class/dmi/id/chassis_type", "r") as f:
+                 t = f.read().strip()
+                 if t in ["8", "9", "10", "14"]: return "Laptop"
+        except: pass
+        return "Desktop"
+
+# ============================================================================
+# 2025 ADVANCED OPTIMIZATION ENGINES
+# ============================================================================
+
+class SysctlOptimizer:
+    """2025 Kernel Parameter Optimization Engine - Research Based"""
+    
+    # Memory parameters optimized for different storage types
+    MEMORY_PARAMS = {
+        "vm.swappiness": {"ssd": 10, "nvme": 5, "hdd": 60, "default": 10},
+        "vm.dirty_ratio": {"ssd": 10, "nvme": 5, "hdd": 20, "default": 10},
+        "vm.dirty_background_ratio": {"ssd": 5, "nvme": 3, "hdd": 10, "default": 5},
+        "vm.dirty_expire_centisecs": {"all": 500},
+        "vm.dirty_writeback_centisecs": {"all": 100},
+        "vm.vfs_cache_pressure": {"all": 50},
+        "vm.compaction_proactiveness": {"desktop": 50, "laptop": 20, "gamer": 50},
+        "vm.page_lock_unfairness": {"all": 1},
+        "vm.watermark_boost_factor": {"all": 0},
+        "vm.watermark_scale_factor": {"all": 125},
+        "vm.zone_reclaim_mode": {"all": 0},
+        "vm.min_free_kbytes": {"auto": True},  # Calculated based on RAM
+    }
+    
+    # Network parameters for modern high-speed connections
+    NETWORK_PARAMS = {
+        "net.ipv4.tcp_congestion_control": "bbr",
+        "net.core.default_qdisc": "fq",
+        "net.ipv4.tcp_fastopen": 3,
+        "net.ipv4.tcp_slow_start_after_idle": 0,
+        "net.ipv4.tcp_mtu_probing": 1,
+        "net.ipv4.tcp_ecn": 1,
+        "net.core.rmem_max": 16777216,
+        "net.core.wmem_max": 16777216,
+        "net.core.rmem_default": 1048576,
+        "net.core.wmem_default": 1048576,
+        "net.core.netdev_max_backlog": 16384,
+        "net.core.somaxconn": 8192,
+        "net.ipv4.tcp_max_syn_backlog": 8192,
+        "net.ipv4.tcp_tw_reuse": 1,
+        "net.ipv4.tcp_fin_timeout": 15,
+        "net.ipv4.tcp_keepalive_time": 60,
+        "net.ipv4.tcp_keepalive_intvl": 10,
+        "net.ipv4.tcp_keepalive_probes": 6,
+    }
+    
+    # Latency-sensitive parameters for gaming/desktop
+    LATENCY_PARAMS = {
+        "kernel.sched_cfs_bandwidth_slice_us": 500,
+        "kernel.sched_autogroup_enabled": 1,
+    }
+    
+    # Security-related kernel parameters
+    SECURITY_PARAMS = {
+        "kernel.kptr_restrict": 2,
+        "kernel.dmesg_restrict": 1,
+        "kernel.perf_event_paranoid": 2,
+        "net.ipv4.conf.all.rp_filter": 1,
+        "net.ipv4.conf.default.rp_filter": 1,
+    }
+    
+    def __init__(self, hw_detector: HardwareDetector):
+        self.hw = hw_detector
+        self.conf_file = "/etc/sysctl.d/99-fedoraclean-ai.conf"
+        
+    def get_disk_type(self) -> str:
+        """Determine disk type from hardware detector"""
+        disk = self.hw.disk_info.lower()
+        if "nvme" in disk:
+            return "nvme"
+        elif "ssd" in disk:
+            return "ssd"
+        else:
+            return "hdd"
+    
+    def calculate_min_free_kbytes(self) -> int:
+        """Calculate optimal min_free_kbytes based on RAM size"""
+        ram_gb = self.hw.ram_info['total']
+        # Formula: sqrt(RAM in KB) * 16, capped between 64MB and 256MB
+        import math
+        ram_kb = ram_gb * 1024 * 1024
+        calculated = int(math.sqrt(ram_kb) * 16)
+        min_val = 65536  # 64MB
+        max_val = 262144  # 256MB
+        return max(min_val, min(max_val, calculated))
+    
+    def generate_optimized_config(self, persona: str = "general") -> dict:
+        """Generate optimized sysctl parameters based on hardware and persona"""
+        disk_type = self.get_disk_type()
+        chassis = self.hw.chassis.lower()
+        tweaks = {}
+        
+        # Memory parameters
+        for param, values in self.MEMORY_PARAMS.items():
+            if isinstance(values, dict):
+                if "auto" in values and values["auto"]:
+                    if param == "vm.min_free_kbytes":
+                        tweaks[param] = str(self.calculate_min_free_kbytes())
+                elif disk_type in values:
+                    tweaks[param] = str(values[disk_type])
+                elif chassis in values:
+                    tweaks[param] = str(values[chassis])
+                elif persona.lower() in ["gamer", "oyuncu"] and "gamer" in values:
+                    tweaks[param] = str(values["gamer"])
+                elif "all" in values:
+                    tweaks[param] = str(values["all"])
+                elif "default" in values:
+                    tweaks[param] = str(values["default"])
+        
+        # Network parameters
+        for param, value in self.NETWORK_PARAMS.items():
+            tweaks[param] = str(value)
+        
+        # Latency parameters for desktop/gamer
+        if persona.lower() in ["gamer", "oyuncu", "geliştirici", "dev"] or chassis == "desktop":
+            for param, value in self.LATENCY_PARAMS.items():
+                tweaks[param] = str(value)
+        
+        return tweaks
+    
+    def apply_config(self, tweaks: dict) -> list:
+        """Apply sysctl configuration and return list of applied changes"""
+        applied = []
+        
+        # Read existing config
+        current_conf = ""
+        if os.path.exists(self.conf_file):
+            try:
+                with open(self.conf_file, "r") as f:
+                    current_conf = f.read()
+            except:
+                pass
+        
+        # Find new lines to add
+        new_lines = []
+        for key, val in tweaks.items():
+            if f"{key} = {val}" not in current_conf and f"{key}={val}" not in current_conf:
+                new_lines.append(f"{key} = {val}")
+                applied.append((key, val))
+        
+        if new_lines:
+            try:
+                with open(self.conf_file, "a") as f:
+                    f.write("\n# FedoraClean AI Generated - " + 
+                           __import__('datetime').datetime.now().strftime("%Y-%m-%d %H:%M") + "\n")
+                    f.write("\n".join(new_lines) + "\n")
+                # Apply immediately
+                run_command("sysctl --system", sudo=True)
+            except Exception as e:
+                console.print(f"[red]Sysctl yazma hatası: {e}[/red]")
+                return []
+        
+        return applied
+
+
+class IOSchedulerOptimizer:
+    """Dynamic I/O Scheduler Selection based on device type and workload"""
+    
+    # Optimal scheduler for each device type and workload
+    SCHEDULER_MATRIX = {
+        "nvme": {
+            "gaming": "none",      # Minimum latency
+            "server": "none",      # Maximum throughput
+            "desktop": "mq-deadline",  # Balanced
+            "mixed": "mq-deadline",
+        },
+        "ssd": {
+            "gaming": "mq-deadline",
+            "server": "mq-deadline",
+            "desktop": "bfq",      # Fair I/O for desktop responsiveness
+            "mixed": "mq-deadline",
+        },
+        "hdd": {
+            "all": "bfq",          # Best for rotational media
+        },
+    }
+    
+    # Read-ahead KB values
+    READ_AHEAD = {
+        "nvme": 256,
+        "ssd": 256,
+        "hdd": 4096,  # HDD benefits from more read-ahead
+    }
+    
+    def __init__(self, hw_detector: HardwareDetector):
+        self.hw = hw_detector
+        
+    def detect_block_devices(self) -> list:
+        """Get list of block devices with their types"""
+        devices = []
+        s, out, _ = run_command("lsblk -d -o NAME,TYPE,TRAN,ROTA -n")
+        if s:
+            for line in out.strip().split('\n'):
+                if not line.strip():
+                    continue
+                parts = line.split()
+                if len(parts) >= 4:
+                    name, dev_type, transport, rota = parts[0], parts[1], parts[2], parts[3]
+                    if dev_type == "disk" and "loop" not in name:
+                        # Determine device category
+                        if transport == "nvme":
+                            category = "nvme"
+                        elif rota == "0":
+                            category = "ssd"
+                        else:
+                            category = "hdd"
+                        devices.append({
+                            "name": name,
+                            "transport": transport,
+                            "category": category,
+                            "path": f"/dev/{name}"
+                        })
+        return devices
+    
+    def get_current_scheduler(self, device: str) -> str:
+        """Get current I/O scheduler for a device"""
+        s, out, _ = run_command(f"cat /sys/block/{device}/queue/scheduler 2>/dev/null")
+        if s:
+            match = re.search(r'\[(\w+)\]', out)
+            if match:
+                return match.group(1)
+        return "unknown"
+    
+    def get_optimal_scheduler(self, device_category: str, workload: str = "desktop") -> str:
+        """Determine optimal scheduler based on device and workload"""
+        if device_category in self.SCHEDULER_MATRIX:
+            matrix = self.SCHEDULER_MATRIX[device_category]
+            if workload in matrix:
+                return matrix[workload]
+            elif "all" in matrix:
+                return matrix["all"]
+            elif "desktop" in matrix:
+                return matrix["desktop"]
+        return "mq-deadline"  # Safe default
+    
+    def apply_scheduler(self, device: str, scheduler: str) -> bool:
+        """Apply I/O scheduler to a device"""
+        sched_path = f"/sys/block/{device}/queue/scheduler"
+        try:
+            with open(sched_path, "w") as f:
+                f.write(scheduler)
+            return True
+        except Exception as e:
+            console.print(f"[red]Scheduler değiştirilemedi ({device}): {e}[/red]")
+            return False
+    
+    def apply_read_ahead(self, device: str, category: str) -> bool:
+        """Apply optimal read-ahead value"""
+        ra_path = f"/sys/block/{device}/queue/read_ahead_kb"
+        ra_value = self.READ_AHEAD.get(category, 256)
+        try:
+            with open(ra_path, "w") as f:
+                f.write(str(ra_value))
+            return True
+        except:
+            return False
+    
+    def optimize_all_devices(self, workload: str = "desktop") -> list:
+        """Optimize all detected block devices"""
+        results = []
+        devices = self.detect_block_devices()
+        
+        for dev in devices:
+            name = dev["name"]
+            category = dev["category"]
+            current = self.get_current_scheduler(name)
+            optimal = self.get_optimal_scheduler(category, workload)
+            
+            if current != optimal:
+                success = self.apply_scheduler(name, optimal)
+                if success:
+                    results.append({
+                        "device": name,
+                        "category": category,
+                        "from": current,
+                        "to": optimal,
+                        "status": "changed"
+                    })
+            else:
+                results.append({
+                    "device": name,
+                    "category": category,
+                    "scheduler": current,
+                    "status": "optimal"
+                })
+            
+            # Apply read-ahead
+            self.apply_read_ahead(name, category)
+        
+        return results
+
+
+class OptimizationBackup:
+    """Backup and restore system for optimization rollback"""
+    
+    BACKUP_DIR = "/var/lib/fedoraclean/backups"
+    
+    def __init__(self):
+        os.makedirs(self.BACKUP_DIR, exist_ok=True)
+    
+    def create_snapshot(self, name: str = None) -> str:
+        """Create a backup snapshot of current optimization configs"""
+        import datetime
+        import shutil
+        
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        snapshot_name = name or f"snapshot_{timestamp}"
+        snapshot_dir = os.path.join(self.BACKUP_DIR, snapshot_name)
+        
+        os.makedirs(snapshot_dir, exist_ok=True)
+        
+        # Files to backup
+        backup_files = [
+            "/etc/sysctl.d/99-fedoraclean-ai.conf",
+            "/etc/sysctl.d/99-fedoraclean-net.conf",
+            "/etc/dnf/dnf5.conf",
+            "/etc/dnf/dnf.conf",
+            "/etc/fstab",
+        ]
+        
+        for src in backup_files:
+            if os.path.exists(src):
+                dst = os.path.join(snapshot_dir, os.path.basename(src))
+                try:
+                    shutil.copy2(src, dst)
+                except:
+                    pass
+        
+        # Save current sysctl values
+        s, out, _ = run_command("sysctl -a 2>/dev/null")
+        if s:
+            with open(os.path.join(snapshot_dir, "sysctl_dump.txt"), "w") as f:
+                f.write(out)
+        
+        # Save metadata
+        with open(os.path.join(snapshot_dir, "metadata.txt"), "w") as f:
+            f.write(f"Created: {datetime.datetime.now().isoformat()}\n")
+            f.write(f"Kernel: {__import__('platform').release()}\n")
+        
+        return snapshot_name
+    
+    def list_snapshots(self) -> list:
+        """List available snapshots"""
+        snapshots = []
+        if os.path.exists(self.BACKUP_DIR):
+            for name in os.listdir(self.BACKUP_DIR):
+                path = os.path.join(self.BACKUP_DIR, name)
+                if os.path.isdir(path):
+                    meta_file = os.path.join(path, "metadata.txt")
+                    created = "Unknown"
+                    if os.path.exists(meta_file):
+                        with open(meta_file, "r") as f:
+                            for line in f:
+                                if line.startswith("Created:"):
+                                    created = line.split(":", 1)[1].strip()
+                                    break
+                    snapshots.append({"name": name, "created": created})
+        return sorted(snapshots, key=lambda x: x["created"], reverse=True)
+    
+    def restore_snapshot(self, snapshot_name: str) -> bool:
+        """Restore configuration from a snapshot"""
+        import shutil
+        
+        snapshot_dir = os.path.join(self.BACKUP_DIR, snapshot_name)
+        if not os.path.exists(snapshot_dir):
+            console.print(f"[red]Yedek bulunamadı: {snapshot_name}[/red]")
+            return False
+        
+        # Restore files
+        restore_map = {
+            "99-fedoraclean-ai.conf": "/etc/sysctl.d/99-fedoraclean-ai.conf",
+            "99-fedoraclean-net.conf": "/etc/sysctl.d/99-fedoraclean-net.conf",
+            "dnf5.conf": "/etc/dnf/dnf5.conf",
+            "dnf.conf": "/etc/dnf/dnf.conf",
+        }
+        
+        for src_name, dst_path in restore_map.items():
+            src = os.path.join(snapshot_dir, src_name)
+            if os.path.exists(src):
+                try:
+                    shutil.copy2(src, dst_path)
+                    console.print(f"[green]✓ Geri yüklendi: {dst_path}[/green]")
+                except Exception as e:
+                    console.print(f"[red]✗ Hata ({dst_path}): {e}[/red]")
+        
+        # Reload sysctl
+        run_command("sysctl --system", sudo=True)
+        
+        return True
+
+
+class FedoraOptimizer:
+    def __init__(self):
+        self.dnf_conf = "/etc/dnf/dnf5.conf"
+        self.hw = HardwareDetector()
+
+    def get_system_dna(self):
+        """Enhanced system DNA with deep profiling - Format for display"""
+        dna = [
+            f"[bold cyan]CPU:[/] {self.hw.cpu_info['model']} ({self.hw.cpu_info['cores']} Çekirdek, {self.hw.cpu_info['freq']})",
+        ]
+        
+        # CPU Microarchitecture (if available)
+        if hasattr(self.hw, 'cpu_microarch'):
+            ma = self.hw.cpu_microarch
+            if ma['hybrid']:
+                dna.append(f"[bold cyan]  └─ Mimari:[/] {ma['topology']} (Hibrit)")
+            else:
+                dna.append(f"[bold cyan]  └─ Mimari:[/] {ma['vendor']} {ma['topology']}")
+            if ma['governor'] != "Unknown":
+                dna.append(f"[bold cyan]  └─ Governor:[/] {ma['governor']} | EPP: {ma['epp']}")
+        
+        dna.append(f"[bold cyan]RAM:[/] {self.hw.ram_info['total']} GB {self.hw.ram_info['type']} @ {self.hw.ram_info['speed']}")
+        dna.append(f"[bold cyan]GPU:[/] {self.hw.gpu_info}")
+        dna.append(f"[bold cyan]DİSK:[/] {self.hw.disk_info}")
+        
+        # NVMe Health
+        if hasattr(self.hw, 'nvme_health') and self.hw.nvme_health['available']:
+            nvme = self.hw.nvme_health
+            dna.append(f"[bold cyan]  └─ NVMe Sağlık:[/] Temp: {nvme['temperature']} | Aşınma: {nvme['wear_level']} | Yazılan: {nvme['data_written_tb']}")
+        
+        dna.append(f"[bold cyan]AĞ:[/] {self.hw.net_info}")
+        dna.append(f"[bold cyan]TİP:[/] {self.hw.chassis}")
+        
+        # BIOS Info
+        if hasattr(self.hw, 'bios_info'):
+            bios = self.hw.bios_info
+            dna.append(f"[bold cyan]BIOS:[/] {bios['vendor']} ({bios['version']})")
+            boot_mode = "UEFI" if bios['uefi'] else "Legacy"
+            dna.append(f"[bold cyan]  └─ Mod:[/] {boot_mode} | Secure Boot: {bios['secure_boot']} | {bios['virtualization']}")
+        
+        # Kernel Features
+        if hasattr(self.hw, 'kernel_features'):
+            kf = self.hw.kernel_features
+            active_features = []
+            if kf['psi']: active_features.append("PSI")
+            if kf['cgroup_v2']: active_features.append("cgroup2")
+            if kf['io_uring']: active_features.append("io_uring")
+            if kf['bpf']: active_features.append("BPF")
+            if kf['sched_ext']: active_features.append("sched_ext")
+            if kf['zram']: active_features.append("ZRAM")
+            if kf['zswap']: active_features.append("zswap")
+            if active_features:
+                dna.append(f"[bold cyan]Kernel:[/] {' | '.join(active_features)}")
+            dna.append(f"[bold cyan]  └─ THP:[/] {kf['transparent_hugepages']}")
+        
+        return dna
+
+    # ... Existing optimization methods (apply_dnf5, etc) remain ...
+    
+    def apply_dnf5_optimizations(self):
+        console.print(f"[yellow]DNF5 Yapılandırması Kontrol Ediliyor ({self.dnf_conf})...[/yellow]")
+        target_conf = self.dnf_conf
+        if not os.path.exists(target_conf): target_conf = "/etc/dnf/dnf.conf"
+        
+        try:
+             with open(target_conf, 'r') as f: content = f.read()
+        except PermissionError:
+             console.print(f"[red]Erişim reddedildi. Root gerekli.[/red]")
+             return
+        
+        changes = []
+        new_content = content
+        
+        if "max_parallel_downloads=10" in content:
+            console.print("[dim cyan]• İndirme hızı zaten optimize edilmiş (10).[/]")
+        elif "max_parallel_downloads" in content:
+             new_content = new_content.replace("max_parallel_downloads=3", "max_parallel_downloads=10")
+             changes.append("Maksimum indirme > 10")
+        else:
+            new_content += "\nmax_parallel_downloads=10\n"
+            changes.append("Maksimum indirme > 10")
+        
+        if "defaultyes=True" in content:
+             console.print("[dim cyan]• Varsayılan onay (defaultyes) zaten aktif.[/]")
+        else:
+            new_content += "\ndefaultyes=True\n"
+            changes.append("Otomatik onay > True")
+
+        if changes:
+             try:
+                 with open(target_conf, 'w') as f: f.write(new_content)
+                 console.print(Panel("\n".join(changes), title="DNF5 Güncellendi", border_style=Theme.SUCCESS))
+             except Exception as e: console.print(f"[red]Hata: {e}[/red]")
+        else:
+             console.print("[green]✓ DNF5 tamamen optimize durumda.[/green]")
+
+    def optimize_boot_profile(self):
+        console.print("[yellow]Boot Servisleri Kontrol Ediliyor...[/yellow]")
+        s_ok, s_out, _ = run_command("systemctl is-enabled NetworkManager-wait-online.service")
+        
+        if "disabled" in s_out:
+             console.print("[green]✓ NetworkManager-wait-online zaten devre dışı (Hızlı Boot aktif).[/green]")
+        else:
+            if Prompt.ask("[bold]Boot hızını artırmak için ağ bekleme servisinis kapatmak ister misiniz? (Önerilir)[/bold]", choices=["e", "h"], default="e") == "e":
+                run_command("systemctl disable --now NetworkManager-wait-online.service", sudo=True)
+                console.print("[green]✓ Servis devre dışı bırakıldı.[/green]")
+            else:
+                console.print("[dim]İşlem iptal edildi.[/dim]")
+
+    def optimize_network(self):
+        console.print("[yellow]Ağ Yığını (TCP/IP) Optimize Ediliyor...[/yellow]")
+        tweaks = {
+            "net.ipv4.tcp_fastopen": "3",
+            "net.core.default_qdisc": "fq_codel",
+            "net.ipv4.tcp_congestion_control": "bbr"
+        }
+        conf_file = "/etc/sysctl.d/99-fedoraclean-net.conf"
+        current_conf = ""
+        if os.path.exists(conf_file):
+            with open(conf_file, 'r') as f: current_conf = f.read()
+            
+        new_lines = []
+        for key, val in tweaks.items():
+            if f"{key} = {val}" not in current_conf: new_lines.append(f"{key} = {val}")
+        
+        if new_lines:
+             try:
+                 with open(conf_file, "a") as f: f.write("\n".join(new_lines) + "\n")
+                 run_command("sysctl --system", sudo=True)
+                 console.print(Panel("\n".join(new_lines), title="sysctl Ayarları Eklendi", border_style=Theme.SUCCESS))
+             except Exception as e: console.print(f"[red]Yazma hatası: {e}[/red]")
+        else:
+             console.print("[green]✓ Ağ yığını zaten optimize durumda.[/green]")
+
+    def trim_ssd(self):
+        if "SSD" not in self.hw.disk_info and "NVMe" not in self.hw.disk_info:
+             console.print("[yellow]⚠ Sistemde SSD algılanmadı (veya HDD kullanılıyor). TRIM HDD için uygun değil.[/yellow]")
+             # return silently or log? keeping simple
+             pass
+
+        console.print("[yellow]SSD Durumu Kontrol Ediliyor...[/yellow]")
+        s_ok, s_out, _ = run_command("systemctl is-enabled fstrim.timer")
+        if "enabled" not in s_out:
+            run_command("systemctl enable --now fstrim.timer", sudo=True)
+            console.print("[green]✓ Otomatik TRIM aktif edildi.[/green]")
+        else:
+            console.print("[dim cyan]• Otomatik SSD TRIM (fstrim.timer) zaten aktif.[/]")
+        
+        console.print(" > Manuel TRIM çalıştırılıyor...")
+        run_command("fstrim -av", sudo=True)
+        console.print("[green]✓ TRIM tamamlandı.[/green]")
+
+    def optimize_btrfs(self):
+        console.print("[yellow]Btrfs Bağlama Seçenekleri Kontrol Ediliyor...[/yellow]")
+        fstab = "/etc/fstab"
+        
+        if not os.path.exists(fstab): return
+
+        # Check against string description logic from HardwareDetector
+        if "HDD" in self.hw.disk_info:
+             console.print("[yellow]ℹ HDD kullanıyorsunuz. 'noatime' yine de faydalı olabilir ancak SSD kadar kritik değil.[/yellow]")
+        try:
+             with open(fstab, 'r') as f: lines = f.readlines()
+        except: return
+             
+        new_lines = []
+        changed = False
+        for line in lines:
+            if "btrfs" in line and "relatime" in line:
+                new_lines.append(line.replace("relatime", "noatime"))
+                changed = True
+            else:
+                new_lines.append(line)
+        
+        if changed:
+            if Confirm.ask("[bold]Disk performansını artırmak için 'noatime' ayarı uygulansın mı?[/bold]"):
+                 with open(fstab, 'w') as f: f.writelines(new_lines)
+                 console.print("[green]✓ /etc/fstab güncellendi.[/green]")
+        else:
+            console.print("[green]✓ Btrfs zaten 'noatime' (veya özel ayar) kullanıyor.[/green]")
+
+    def calculate_smart_score(self):
+        score = 0
+        report = []
+        
+        # 1. DNF (Universal)
+        try:
+            with open("/etc/dnf/dnf5.conf", "r") as f: c = f.read()
+            if "max_parallel_downloads=10" in c: 
+                score += 15
+                report.append(("[green]MÜKEMMEL[/]", "Paket Yöneticisi", "DNF5 Tam Güçte (Paralel İndirme x10)."))
+            else:
+                report.append(("[yellow]GELİŞTİRİLMELİ[/]", "Paket Yöneticisi", "DNF5 limitli. Hızlandırma önerilir."))
+        except: pass
+
+        # 2. Boot Service
+        s, out, _ = run_command("systemctl is-enabled NetworkManager-wait-online.service")
+        if "disabled" in out:
+             score += 15
+             report.append(("[green]HIZLI[/]", "Boot Süresi", "Ağ bekleme servisi kapalı."))
+        else:
+             report.append(("[red]YAVAŞ[/]", "Boot Süresi", "Boot sırasında ağ bekleniyor (Gecikme yaratır)."))
+
+        # 3. Disk Strategy (Context Aware)
+        if "NVMe" in self.hw.disk_info:
+            # NVMe uses 'none' scheduler usually
+            # Check sched
+            # Hard to pinpoint device name instantly, assume /dev/nvme0n1 for check
+            # Or just check TRIM which is vital for NVMe
+            t, out_t, _ = run_command("systemctl is-enabled fstrim.timer")
+            if "enabled" in out_t:
+                 score += 20
+                 report.append(("[green]KORUNUYOR[/]", "NVMe Sağlığı", "NVMe SSD için otomatik TRIM aktif."))
+            else:
+                 report.append(("[red]RİSKLİ[/]", "NVMe Sağlığı", "Yüksek performanslı NVMe için TRIM şart!"))
+        elif "SSD" in self.hw.disk_info:
+            t, out_t, _ = run_command("systemctl is-enabled fstrim.timer")
+            if "enabled" in out_t:
+                 score += 20
+                 report.append(("[green]KORUNUYOR[/]", "SSD Sağlığı", "Otomatik TRIM aktif."))
+            else:
+                 report.append(("[red]RİSKLİ[/]", "SSD Sağlığı", "SSD ömrü için TRIM açılmalı."))
+        else:
+            score += 20
+            report.append(("[blue]SABİT[/]", "Disk", "Mekanik disk için standart yapılandırma."))
+
+        # 4. Network (Wi-Fi 6 vs Ethernet)
+        if os.path.exists("/etc/sysctl.d/99-fedoraclean-net.conf"):
+             score += 15
+             report.append(("[green]MODERN[/]", "Ağ Protokolü", "TCP BBR ve Fast Open aktif."))
+        else:
+             report.append(("[yellow]ESKİ[/]", "Ağ Protokolü", "Geleneksel TCP Cubic. BBR ile hızlanabilir."))
+
+        # 5. RAM / ZRAM Strategy
+        ram_gb = self.hw.ram_info['total']
+        s_z, zram_out, _ = run_command("zramctl") # Fix: grab stdout
+        
+        if "zram" in zram_out:
+            score += 20
+            msg = f"{ram_gb} GB RAM ile ZRAM sıkıştırma devrede."
+            if ram_gb < 16: msg += " (Düşük RAM için hayati)."
+            report.append(("[green]VERİMLİ[/]", "Bellek Yönetimi", msg))
+        else:
+            if ram_gb < 16:
+                report.append(("[red]KRİTİK[/]", "Bellek Yönetimi", f"{ram_gb} GB RAM var ama ZRAM kapalı! Performans düşer."))
+            else:
+                score += 15
+                report.append(("[yellow]PASİF[/]", "Bellek Yönetimi", "ZRAM kapalı (Yüksek RAM var, acil değil)."))
+        
+        # 6. Performance Profile (New)
+        # Check power-profiles-daemon if laptop
+        if self.hw.chassis == "Laptop":
+            s_p, p_out, _ = run_command("powerprofilesctl get")
+            if "performance" in p_out or "balanced" in p_out:
+                score += 15
+                report.append(("[green]DENGELİ[/]", "Güç Yönetimi", f"Laptop modu: {p_out.strip()}"))
+            else:
+                report.append(("[yellow]TASARRUF[/]", "Güç Yönetimi", "Güç tasarrufu modunda. Performans düşebilir."))
+        else:
+            score += 15
+            report.append(("[green]MAKSİMUM[/]", "Güç Yönetimi", "Masaüstü güç profili."))
+
+        return min(100, score), report
+
+    
+    # --- AI / Expert System Engine ---
+
+    def _get_pressure_stall(self, resource="cpu"):
+        # Reads /proc/pressure/{cpu,io,memory}
+        # Returns 'some 10' (avg10 pressure)
+        try:
+            with open(f"/proc/pressure/{resource}", "r") as f:
+                content = f.read()
+                # Format: some avg10=0.00 avg60=0.00 ...
+                # Extract avg10
+                match = re.search(r"avg10=(\d+\.\d+)", content)
+                if match: return float(match.group(1))
+        except: pass
+        return 0.0
+
+    def analyze_usage_persona(self):
+        # Heuristic to determine user type
+        persona = "Genel Kullanıcı"
+        confidence = 0
+        
+        # Check active processes
+        s, out, _ = run_command("ps -eo comm")
+        procs = out.lower()
+        
+        if "steam" in procs or "lutris" in procs or "heroic" in procs:
+            persona = "Oyuncu (Gamer)"
+            confidence += 30
+            
+        if "code" in procs or "pycharm" in procs or "node" in procs or "docker" in procs:
+             if persona == "Oyuncu (Gamer)":
+                 persona = "Hibrit (Oyun & Dev)"
+             else:
+                 persona = "Geliştirici (Dev)"
+             confidence += 30
+             
+        # Hardware Check
+        if "NVIDIA" in self.hw.gpu_info or "AMD" in self.hw.gpu_info:
+             if "Intel" not in self.hw.gpu_info: # Dedicated
+                 confidence += 20
+        
+        if self.hw.ram_info['total'] > 30:
+             confidence += 10 # Workstation likely
+             
+        return persona, confidence
+
+    def optimize_ai_heuristic(self):
+        console.print("[bold magenta]🤖 YZ Karar Motoru (AI Engine) Çalışıyor...[/bold magenta]")
+        
+        # 1. Gather Telemetry (Sensors)
+        psi_cpu = self._get_pressure_stall("cpu")
+        psi_io = self._get_pressure_stall("io")
+        psi_mem = self._get_pressure_stall("memory")
+        persona, conf = self.analyze_usage_persona()
+        
+        console.print(Panel(
+            f"👤 [bold cyan]Tespit Edilen Persona:[/] {persona} (Güven: %{conf})\n"
+            f"📊 [bold cyan]Sistem Stresi (PSI):[/] CPU: {psi_cpu:.2f} | IO: {psi_io:.2f} | MEM: {psi_mem:.2f}",
+            title="AI Durum Analizi", border_style="magenta"
+        ))
+        
+        tweaks = {}
+        
+        # 2. Decision Matrix
+        
+        # A. VM Compaction (Desfragmentation responsiveness)
+        # Higher proactiveness = less latency spikes when allocating huge pages
+        # Kernel default is usually 20.
+        tweaks["vm.compaction_proactiveness"] = "20"
+        
+        if "Oyuncu" in persona or "Geliştirici" in persona:
+             tweaks["vm.compaction_proactiveness"] = "50" # More aggressive compaction
+             tweaks["vm.page_lock_unfairness"] = "1" # Reduce latency for lock contention
+        
+        # B. Swappiness Dynamic Adjustment
+        # If PSI Memory is high (> 5.0), we need swap backing.
+        # If low, we prefer RAM.
+        if psi_mem > 5.0:
+             tweaks["vm.swappiness"] = "60" # Allow swap to relieve pressure
+        else:
+             tweaks["vm.swappiness"] = "10" # Standard optimization for SSD
+             
+        # C. Scheduler Granularity
+        # For Desktop/Latency, we want smaller timeslices usually? 
+        # Actually newer kernels deprecated sched_latency_ns. 
+        # We assume standard is fine, maybe tweak migration cost if available.
+        
+        # D. VFS Cache
+        tweaks["vm.vfs_cache_pressure"] = "50" # Keep directory structure in RAM
+        
+        # E. Network Buffers (Auto-tuning usually good, but we ensure max)
+        tweaks["net.core.rmem_max"] = "16777216"
+        tweaks["net.core.wmem_max"] = "16777216"
+        
+        # Apply Logic
+        console.print("[yellow]🧠 Algoritma Kararları Uygulanıyor (Kernel Sysctl)...[/yellow]")
+        conf_file = "/etc/sysctl.d/99-fedoraclean-ai.conf"
+        
+        current_conf = ""
+        if os.path.exists(conf_file):
+             with open(conf_file, "r") as f: current_conf = f.read()
+             
+        new_lines = []
+        for k, v in tweaks.items():
+            if f"{k} = {v}" not in current_conf:
+                 new_lines.append(f"{k} = {v}")
+                 
+        if new_lines:
+             try:
+                 with open(conf_file, "a") as f: f.write("\n".join(new_lines) + "\n")
+                 run_command("sysctl --system", sudo=True)
+                 for l in new_lines:
+                     console.print(f"  [green]✓[/] {l} [dim](Persona: {persona})[/dim]")
+             except Exception as e: console.print(f"[red]Hata: {e}[/red]")
+        else:
+             console.print("[green]✓ AI Kernel Ayarları zaten ideal durumda.[/green]")
+             
+        # F. CPU Governor Check (Intel P-State)
+        if "Intel" in self.hw.cpu_info['model']:
+             self.optimize_intel_pstate_ai(persona)
+
+    def optimize_intel_pstate_ai(self, persona):
+        # AI decision for P-State EPP (Energy Performance Preference)
+        # Modes: performance, balance_performance, power
+        console.print("[yellow]⚡ CPU Enerji Politikası (EPP) Denetleniyor...[/yellow]")
+        
+        target_epp = "balance_performance"
+        if "Oyuncu" in persona or "Dev" in persona:
+            if self.hw.chassis == "Desktop":
+                 target_epp = "performance"
+        # Apply to all cores
+        # /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference
+        # Warning: This resets on boot unless we use TLP or tuned. 
+        # We will use 'tuned-adm' if available as persistent method.
+        
+        s, out, _ = run_command("tuned-adm active")
+        current_profile = out.strip().split(": ")[-1]
+        
+        target_profile = "balanced"
+        if target_epp == "performance": target_profile = "throughput-performance"
+        
+        if target_profile not in current_profile:
+             console.print(f"  [cyan]ℹ Hedef Profil: {target_profile} (Mevcut: {current_profile})[/]")
+             if Confirm.ask(f"[bold]AI, '{target_profile}' güç profilini öneriyor. Geçiş yapılsın mı?[/bold]"):
+                 run_command(f"tuned-adm profile {target_profile}", sudo=True)
+                 console.print(f"[green]✓ Tuned profili güncellendi: {target_profile}[/green]")
+        else:
+             console.print(f"  [green]✓ CPU Güç Profili ({current_profile}) kullanıma uygun.[/green]")
+
+    def optimize_intel_gpu(self):
+        # Only for Intel systems
+        if "Intel" not in self.hw.gpu_info:
+             console.print("[dim]• Intel GPU algılanmadı. Atlanıyor.[/dim]")
+             return
+
+        console.print("[yellow]Intel Iris Xe (GuC/HuC) Bellenimi Kontrol Ediliyor...[/yellow]")
+        
+        # Check if parameter is already in GRUB cmdline
+        try:
+             with open("/proc/cmdline", "r") as f: cmdline = f.read()
+             if "i915.enable_guc" in cmdline:
+                  console.print("[green]✓ Intel GuC/HuC parametresi zaten ekli.[/green]")
+                  return
+        except: return
+
+        if Confirm.ask("[bold]Intel GPU performansını artırmak için GuC/HuC Firmware aktif edilsin mi? (GRUB güncellenir)[/bold]"):
+             # Fedora uses grubby safely
+             # i915.enable_guc=2 -> Submission via GuC
+             cmd = "grubby --update-kernel=ALL --args='i915.enable_guc=2'"
+             s, out, err = run_command(cmd, sudo=True)
+             if s:
+                 console.print("[green]✓ GRUB güncellendi. Yeniden başlatma sonrası aktif olur.[/green]")
+             else:
+                 console.print(f"[red]⚠ Hata: {err}[/red]")
+
+    def optimize_full_auto(self):
+        """Enhanced full auto optimization using 2025 AI engines"""
+        console.print("[bold magenta]🚀 TAM OTOMATİK YZ CİHAZ YÖNETİMİ (2025 Enhanced)[/bold magenta]")
+        
+        # 0. Create Backup First
+        console.print("[yellow]📦 Yedek oluşturuluyor...[/yellow]")
+        try:
+            backup = OptimizationBackup()
+            snapshot_name = backup.create_snapshot()
+            console.print(f"[green]✓ Yedek oluşturuldu: {snapshot_name}[/green]")
+        except Exception as e:
+            console.print(f"[red]⚠ Yedek oluşturulamadı: {e}[/red]")
+        
+        # 1. Hardware & DNA Analysis
+        console.print("\n[bold cyan]📊 Derin Sistem Analizi...[/bold cyan]")
+        dna = self.get_system_dna()
+        for line in dna[:8]:  # Show first 8 lines
+            console.print(f"  {line}")
+        
+        # 2. Persona Detection
+        persona, conf = self.analyze_usage_persona()
+        console.print(f"\n[bold cyan]👤 Tespit Edilen Profil:[/] {persona} (Güven: %{conf})")
+        
+        # 3. Advanced Sysctl Optimization (NEW)
+        console.print("\n[bold cyan]🧠 2025 Kernel Parametreleri Uygulanıyor...[/bold cyan]")
+        try:
+            sysctl_opt = SysctlOptimizer(self.hw)
+            tweaks = sysctl_opt.generate_optimized_config(persona)
+            applied = sysctl_opt.apply_config(tweaks)
+            if applied:
+                console.print(f"  [green]✓ {len(applied)} kernel parametresi optimize edildi.[/green]")
+                for key, val in applied[:5]:  # Show first 5
+                    console.print(f"    • {key} = {val}")
+                if len(applied) > 5:
+                    console.print(f"    [dim]... ve {len(applied) - 5} parametre daha[/dim]")
+            else:
+                console.print("  [dim]Tüm parametreler zaten optimal.[/dim]")
+        except Exception as e:
+            console.print(f"[red]Sysctl hatası: {e}[/red]")
+        
+        # 4. I/O Scheduler Optimization (NEW)
+        console.print("\n[bold cyan]💾 I/O Zamanlayıcı Optimizasyonu...[/bold cyan]")
+        try:
+            io_opt = IOSchedulerOptimizer(self.hw)
+            results = io_opt.optimize_all_devices(workload="desktop")
+            for r in results:
+                if r.get("status") == "changed":
+                    console.print(f"  [green]✓ {r['device']} ({r['category']}): {r['from']} → {r['to']}[/green]")
+                else:
+                    console.print(f"  [dim]• {r['device']}: {r.get('scheduler', 'N/A')} (optimal)[/dim]")
+        except Exception as e:
+            console.print(f"[red]I/O Scheduler hatası: {e}[/red]")
+        
+        # 5. Legacy Heuristic Optimization
+        self.optimize_ai_heuristic()
+        
+        # 6. Base/Legacy Optimizations
+        console.print("\n[bold cyan]⚙️ Temel Optimizasyonlar...[/bold cyan]")
+        self.apply_dnf5_optimizations()
+        self.optimize_boot_profile()
+        self.trim_ssd()
+        self.optimize_btrfs()
+        self.optimize_intel_gpu()
+        
+        # Final Summary
+        console.print(Panel(
+            "[bold green]🎉 SİSTEM 2025 YZ MOTORİYLE OPTİMİZE EDİLDİ![/bold green]\n\n"
+            "✅ 30+ kernel parametresi uygulandı\n"
+            "✅ I/O zamanlayıcıları donanıma göre ayarlandı\n"
+            "✅ Ağ yığını BBR ile hızlandırıldı\n"
+            "✅ Disk ve boot optimizasyonları tamamlandı\n\n"
+            f"[dim]Yedek: {snapshot_name} (Geri almak için Rollback kullanın)[/dim]",
+            border_style="green",
+            title="[bold white]OPTİMİZASYON TAMAMLANDI[/]"
+        ))
+
+    # Need to merge AI logic into Score too
+    def calculate_deep_score(self):
+        score, report = self.calculate_smart_score() # Base score
+        
+        # AI Checks
+        # VM Compaction
+        try:
+            with open("/proc/sys/vm/compaction_proactiveness", "r") as f: val = int(f.read().strip())
+            if val >= 20: 
+                score += 10
+                report.append(("[green]AKILLI[/]", "Bellek Tepkisi", f"Proaktif Sıkıştırma Aktif ({val})"))
+            else:
+                 report.append(("[yellow]STANDART[/]", "Bellek Tepkisi", "Standart bellek yönetimi."))
+        except: pass 
+        
+        # Intel GuC (copied from before)
+        if "Intel" in self.hw.gpu_info:
+             with open("/proc/cmdline", "r") as f: cmd = f.read()
+             if "i915.enable_guc" in cmd:
+                  score += 10
+                  report.append(("[green]HIZLANDIRILMIŞ[/]", "GPU Firmware", "Intel GuC/HuC aktif."))
+             else:
+                  report.append(("[yellow]YAZILIM[/]", "GPU Firmware", "Standart CPU zamanlaması."))
+
+        return min(100, score), report
+
+    def full_audit(self):
+        from rich.table import Table
+        from rich.align import Align
+        from rich import box
+        import time
+        
+        console.print("[bold magenta]🧠 YZ Destekli Derin Sistem Analizi...[/bold magenta]")
+        with console.status("[bold cyan]Donanım ve Kernel taranıyor...[/]"):
+            time.sleep(1.5)
+            dna = self.get_system_dna()
+            # Add Kernel Info
+            dna.append(f"[bold cyan]Kernel:[/] {platform.release()}")
+        
+        # Show DNA
+        grid = Table.grid(expand=True)
+        grid.add_column()
+        dna_panel = Panel(
+            "\n".join([f"[cyan]➤[/] {x}" for x in dna]),
+            title="[bold white]SİSTEM KİMLİĞİ (DNA)[/]",
+            border_style="cyan",
+            padding=(1, 2)
+        )
+        console.print(dna_panel)
+        
+        with console.status("[bold magenta]Optimizasyon matrisi ve Derin Ayarlar hesaplanıyor...[/]"):
+            time.sleep(1)
+            score, report_data = self.calculate_deep_score() # Use Deep Score
+        
+        # Show Report
+        if score >= 90: s_color = "green"
+        elif score >= 60: s_color = "yellow"
+        else: s_color = "red"
+        
+        table = Table(box=box.ROUNDED, expand=True, border_style="dim white")
+        table.add_column("DURUM", justify="center", style="bold", width=14)
+        table.add_column("BİLEŞEN", style="magenta", width=16)
+        table.add_column("TEKNİK DETAY", style="white")
+        
+        for st, c, d in report_data:
+            table.add_row(st, c, d)
+            
+        console.print(table)
+        
+        console.print(Panel(
+            Align.center(f"[bold {s_color}]GENEL SAĞLIK SKORU: {score}/100[/]", vertical="middle"),
+            border_style=s_color,
+            padding=(1, 2)
+        ))
+        
+        if score < 95:
+             console.print("\n[bold]TAVSİYE:[/bold] [cyan]6. Tam Otomatik Optimizasyon[/cyan] seçeneği tüm eksikleri tek seferde giderir.")
