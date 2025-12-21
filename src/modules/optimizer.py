@@ -331,16 +331,24 @@ class HardwareDetector:
                 elif "preempt=none" in out:
                     features["preempt_mode"] = "none"
             
-            # BBR version detection
-            s, out, _ = run_command("sysctl net.ipv4.tcp_congestion_control 2>/dev/null")
-            if s and "bbr" in out.lower():
-                # Check for BBRv3 (kernel 6.5+)
-                if features["kernel_major"] >= 6 and features["kernel_minor"] >= 5:
-                    features["bbr_version"] = "bbr3"
-                else:
-                    features["bbr_version"] = "bbr"
+            # BBR version detection - Scientific method
+            s, out, _ = run_command("sysctl -n net.ipv4.tcp_available_congestion_control 2>/dev/null")
+            available_cc = out.strip().split() if s else []
+            
+            s, out, _ = run_command("sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null")
+            current_cc = out.strip() if s else "cubic"
+            
+            if "bbr3" in available_cc:
+                features["bbr_version"] = "bbr3"
+            elif "bbr2" in available_cc:
+                features["bbr_version"] = "bbr2"
+            elif "bbr" in available_cc:
+                features["bbr_version"] = "bbr"
             else:
                 features["bbr_version"] = "cubic"
+            
+            # Check if BBR is currently active
+            features["bbr_active"] = "bbr" in current_cc
             
             # TCP ECN
             s, out, _ = run_command("sysctl net.ipv4.tcp_ecn 2>/dev/null")
@@ -398,6 +406,30 @@ class HardwareDetector:
             pass
         return features
     
+    def get_psi_stats(self) -> Dict[str, Dict[str, Dict[str, float]]]:
+        """Read Pressure Stall Information (PSI) for CPU, Memory, and I/O"""
+        psi = {"cpu": {}, "memory": {}, "io": {}}
+        
+        for resource in ["cpu", "memory", "io"]:
+            try:
+                path = f"/proc/pressure/{resource}"
+                if os.path.exists(path):
+                    with open(path, 'r') as f:
+                        content = f.read()
+                        # Parse lines like: some avg10=0.00 avg60=0.00 avg300=0.00 total=0
+                        for line in content.strip().split('\n'):
+                            parts = line.split()
+                            if not parts: continue
+                            type_ = parts[0]  # "some" or "full"
+                            avg10 = float(parts[1].split('=')[1])
+                            avg60 = float(parts[2].split('=')[1])
+                            
+                            if resource not in psi: psi[resource] = {}
+                            psi[resource][type_] = {"avg10": avg10, "avg60": avg60}
+            except Exception:
+                pass
+        return psi
+
     def _get_bios_settings(self):
         """Read DMI tables for virtualization, secure boot, and BIOS info"""
         info = {
@@ -856,9 +888,11 @@ class AIOptimizationEngine:
             "kernel_version": self.hw.kernel_features.get("kernel_version", "Unknown"),
             "governor": self.hw.cpu_microarch.get("governor", "Unknown"),
             "bbr_active": False,
+            "bbr_version": self.hw.kernel_features.get("bbr_version", "unknown"),
             "trim_active": False,
             "zram_active": self.hw.kernel_features.get("zram", False),
             "btrfs_noatime": self.hw.kernel_features.get("btrfs_noatime", False),
+            "psi": self.hw.get_psi_stats(),
         }
         
         # Check BBR
@@ -2280,6 +2314,7 @@ class FedoraOptimizer:
             # === CPU Analysis ===
             progress.update(task, description="CPU analiz ediliyor...")
             cpu = self.hw.cpu_microarch
+            psi_stats = self.hw.get_psi_stats()  # Get PSI stats
             
             # CPU Vendor & Generation
             if cpu.get('vendor') != 'Unknown':
@@ -2305,6 +2340,13 @@ class FedoraOptimizer:
             elif driver != 'Unknown':
                 scores["cpu"]["score"] += 5
                 scores["cpu"]["items"].append(("~", f"Driver: {driver}"))
+                
+            # PSI CPU Check
+            cpu_psi = psi_stats.get("cpu", {}).get("some", {}).get("avg10", 0.0)
+            if cpu_psi < 5.0:
+                scores["cpu"]["items"].append(("✓", f"CPU PSI: {cpu_psi}% (Düşük yük)"))
+            else:
+                scores["cpu"]["items"].append(("!", f"CPU PSI: {cpu_psi}% (Yüksek yük)"))
             
             progress.advance(task)
             
@@ -2377,16 +2419,25 @@ class FedoraOptimizer:
                     scores["disk"]["score"] += 5
                     scores["disk"]["items"].append(("✓", f"I/O Scheduler: {sched}"))
             
+            # PSI I/O Check
+            io_psi = psi_stats.get("io", {}).get("some", {}).get("avg10", 0.0)
+            if io_psi < 5.0:
+                scores["disk"]["items"].append(("✓", f"I/O PSI: {io_psi}% (Düşük yük)"))
+            else:
+                scores["disk"]["items"].append(("!", f"I/O PSI: {io_psi}% (Yüksek yük)"))
+            
             progress.advance(task)
             
             # === Network Analysis ===
             progress.update(task, description="Ağ analiz ediliyor...")
             
             # BBR check
+            bbr_ver = self.hw.kernel_features.get("bbr_version", "unknown")
             s, out, _ = run_command("sysctl net.ipv4.tcp_congestion_control")
             if s and "bbr" in out:
                 scores["network"]["score"] += 10
-                scores["network"]["items"].append(("✓", "TCP BBR aktif (hızlı transfer)"))
+                ver_display = "BBRv3" if bbr_ver == "bbr3" else "BBRv2" if bbr_ver == "bbr2" else "BBR"
+                scores["network"]["items"].append(("✓", f"TCP {ver_display} aktif (hızlı transfer)"))
             else:
                 scores["network"]["items"].append(("!", "TCP Cubic (eski algoritma)"))
             
@@ -2422,6 +2473,12 @@ class FedoraOptimizer:
             if kf.get('bpf', False):
                 scores["kernel"]["score"] += 2
                 scores["kernel"]["items"].append(("✓", "eBPF aktif"))
+                
+            # sched_ext (2025 Feature)
+            if kf.get('sched_ext', False):
+                scores["kernel"]["score"] += 2
+                status = kf.get('sched_ext_state', 'enabled')
+                scores["kernel"]["items"].append(("✓", f"sched_ext (Extensible Scheduler) [{status}]"))
             
             progress.advance(task)
         
