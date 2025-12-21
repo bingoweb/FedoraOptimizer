@@ -237,42 +237,122 @@ class HardwareDetector:
         return info
     
     def _get_kernel_features(self):
-        """Detect enabled kernel features from /proc and /sys"""
+        """Detect enabled kernel features - 2025 Enhanced with Kernel 6.12+ features"""
         features = {
+            # Basic features
             "cgroup_v2": False,
             "io_uring": False,
             "bpf": False,
-            "sched_ext": False,
+            "psi": False,
             "zswap": False,
             "zram": False,
-            "psi": False,
+            
+            # Kernel 6.12+ features
+            "sched_ext": False,
+            "sched_ext_state": "disabled",
+            "bore_scheduler": False,
+            "preempt_rt": False,
+            "preempt_mode": "Unknown",
+            
+            # Kernel version info
+            "kernel_version": "Unknown",
+            "kernel_major": 0,
+            "kernel_minor": 0,
+            
+            # Network
+            "bbr_version": "Unknown",  # bbr, bbr2, bbr3
+            "tcp_ecn": False,
+            
+            # Memory
             "transparent_hugepages": "Unknown",
+            "thp_defrag": "Unknown",
+            
+            # Btrfs specific
+            "btrfs_mount_options": {},
+            "btrfs_noatime": False,
+            "btrfs_compress": "Unknown",
+            "btrfs_discard_async": False,
+            
+            # CPU governors/schedulers
             "available_governors": [],
-            "available_schedulers": []
+            "available_schedulers": [],
         }
         try:
+            # Kernel version parsing
+            s, out, _ = run_command("uname -r")
+            if s:
+                features["kernel_version"] = out.strip()
+                # Parse version like "6.12.4-200.fc41.x86_64"
+                match = re.match(r'(\d+)\.(\d+)', out.strip())
+                if match:
+                    features["kernel_major"] = int(match.group(1))
+                    features["kernel_minor"] = int(match.group(2))
+            
             # cgroup v2
             s, out, _ = run_command("mount | grep cgroup2")
             features["cgroup_v2"] = s and "cgroup2" in out
             
-            # io_uring support
-            features["io_uring"] = os.path.exists("/proc/sys/kernel/io_uring_disabled") or \
-                                   "io_uring" in open("/proc/kallsyms", "r").read()[:50000] if os.path.exists("/proc/kallsyms") else False
+            # io_uring support (check multiple ways)
+            if os.path.exists("/proc/sys/kernel/io_uring_disabled"):
+                s, out, _ = run_command("cat /proc/sys/kernel/io_uring_disabled")
+                features["io_uring"] = s and out.strip() == "0"
+            else:
+                features["io_uring"] = os.path.exists("/sys/kernel/io_uring")
             
-            # BPF
+            # BPF filesystem
             features["bpf"] = os.path.exists("/sys/fs/bpf")
             
-            # sched_ext (kernel 6.6+)
-            s, out, _ = run_command("cat /sys/kernel/sched_ext/state 2>/dev/null")
-            features["sched_ext"] = s and out.strip() != ""
+            # sched_ext (Kernel 6.12+) - Enhanced detection
+            if os.path.exists("/sys/kernel/sched_ext"):
+                features["sched_ext"] = True
+                s, out, _ = run_command("cat /sys/kernel/sched_ext/state 2>/dev/null")
+                if s and out.strip():
+                    features["sched_ext_state"] = out.strip()  # enabled, disabled
+            
+            # BORE Scheduler detection (CachyOS kernel)
+            s, out, _ = run_command("cat /sys/kernel/sched_bore/version 2>/dev/null")
+            if s and out.strip():
+                features["bore_scheduler"] = True
+            else:
+                # Alternative: check kernel version string
+                if "bore" in features["kernel_version"].lower():
+                    features["bore_scheduler"] = True
+            
+            # PREEMPT_RT detection
+            if os.path.exists("/sys/kernel/realtime"):
+                features["preempt_rt"] = True
+            # Check kernel config or cmdline for preempt mode
+            s, out, _ = run_command("cat /proc/cmdline")
+            if s:
+                if "preempt=full" in out:
+                    features["preempt_mode"] = "full"
+                elif "preempt=voluntary" in out:
+                    features["preempt_mode"] = "voluntary"
+                elif "preempt=none" in out:
+                    features["preempt_mode"] = "none"
+            
+            # BBR version detection
+            s, out, _ = run_command("sysctl net.ipv4.tcp_congestion_control 2>/dev/null")
+            if s and "bbr" in out.lower():
+                # Check for BBRv3 (kernel 6.5+)
+                if features["kernel_major"] >= 6 and features["kernel_minor"] >= 5:
+                    features["bbr_version"] = "bbr3"
+                else:
+                    features["bbr_version"] = "bbr"
+            else:
+                features["bbr_version"] = "cubic"
+            
+            # TCP ECN
+            s, out, _ = run_command("sysctl net.ipv4.tcp_ecn 2>/dev/null")
+            features["tcp_ecn"] = s and "1" in out or "2" in out
             
             # zswap
             s, out, _ = run_command("cat /sys/module/zswap/parameters/enabled 2>/dev/null")
             features["zswap"] = s and out.strip() == "Y"
             
             # zram
-            s, out, _ = run_command("zramctl")
-            features["zram"] = s and "zram" in out
+            s, out, _ = run_command("zramctl --noheadings 2>/dev/null")
+            features["zram"] = s and len(out.strip()) > 0
             
             # PSI (Pressure Stall Information)
             features["psi"] = os.path.exists("/proc/pressure/cpu")
@@ -284,15 +364,34 @@ class HardwareDetector:
                 if match:
                     features["transparent_hugepages"] = match.group(1)
             
+            # THP defrag mode
+            s, out, _ = run_command("cat /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null")
+            if s:
+                match = re.search(r'\[(\w+)\]', out)
+                if match:
+                    features["thp_defrag"] = match.group(1)
+            
+            # Btrfs mount options for root filesystem
+            s, out, _ = run_command("mount | grep 'on / ' | grep btrfs")
+            if s and out.strip():
+                features["btrfs_mount_options"]["root"] = out.strip()
+                if "noatime" in out:
+                    features["btrfs_noatime"] = True
+                if "compress=" in out:
+                    match = re.search(r'compress=(\w+)', out)
+                    if match:
+                        features["btrfs_compress"] = match.group(1)
+                if "discard=async" in out:
+                    features["btrfs_discard_async"] = True
+            
             # Available CPU governors
             s, out, _ = run_command("cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null")
             if s:
                 features["available_governors"] = out.strip().split()
             
-            # Available I/O schedulers (for first block device)
-            s, out, _ = run_command("cat /sys/block/$(lsblk -d -o NAME | grep -v loop | head -2 | tail -1)/queue/scheduler 2>/dev/null")
+            # Available I/O schedulers
+            s, out, _ = run_command("cat /sys/block/$(lsblk -d -o NAME | grep -v loop | grep -v zram | head -1)/queue/scheduler 2>/dev/null")
             if s:
-                # Format: [none] mq-deadline
                 features["available_schedulers"] = re.findall(r'\[?(\w+)\]?', out)
                 
         except Exception:
@@ -470,12 +569,22 @@ class SysctlOptimizer:
         "net.ipv4.tcp_keepalive_time": 60,
         "net.ipv4.tcp_keepalive_intvl": 10,
         "net.ipv4.tcp_keepalive_probes": 6,
+        # 2025 new parameters
+        "net.ipv4.tcp_notsent_lowat": 16384,
+        "net.ipv4.tcp_window_scaling": 1,
+        "net.ipv4.tcp_sack": 1,
+        "net.ipv4.tcp_timestamps": 1,
     }
     
-    # Latency-sensitive parameters for gaming/desktop
+    # Latency-sensitive parameters for gaming/desktop - 2025 Enhanced
     LATENCY_PARAMS = {
         "kernel.sched_cfs_bandwidth_slice_us": 500,
         "kernel.sched_autogroup_enabled": 1,
+        # 2025 scheduler tuning for responsiveness
+        "kernel.sched_min_granularity_ns": 500000,
+        "kernel.sched_wakeup_granularity_ns": 500000,
+        "kernel.sched_migration_cost_ns": 50000,
+        "kernel.sched_nr_migrate": 128,
     }
     
     # Security-related kernel parameters
@@ -485,6 +594,9 @@ class SysctlOptimizer:
         "kernel.perf_event_paranoid": 2,
         "net.ipv4.conf.all.rp_filter": 1,
         "net.ipv4.conf.default.rp_filter": 1,
+        # 2025 additional security
+        "kernel.unprivileged_bpf_disabled": 1,
+        "net.core.bpf_jit_harden": 2,
     }
     
     def __init__(self, hw_detector: HardwareDetector):

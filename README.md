@@ -53,12 +53,21 @@ sudo ./run.sh
 ## 📊 Desteklenen Optimizasyonlar
 
 ### Kernel Parametreleri (sysctl)
-| Kategori | Parametreler |
-|----------|-------------|
-| **Bellek** | vm.swappiness, vm.dirty_ratio, vm.vfs_cache_pressure |
-| **Ağ** | tcp_congestion_control=bbr, tcp_fastopen, buffer sizes |
-| **I/O** | dirty_expire_centisecs, dirty_writeback_centisecs |
-| **Latency** | sched_autogroup, compaction_proactiveness |
+| Kategori | Parametre Sayısı | Önemli Parametreler |
+|----------|------------------|---------------------|
+| **Bellek** | 11 | vm.swappiness, vm.dirty_ratio, vm.compaction_proactiveness |
+| **Ağ** | 21 | tcp_congestion_control=bbr, tcp_fastopen, buffer sizes |
+| **Latency** | 6 | sched_min_granularity_ns, sched_wakeup_granularity_ns |
+| **Güvenlik** | 7 | kptr_restrict, bpf_jit_harden |
+
+### 2025 Kernel Özellikleri
+| Özellik | Kernel | Durum |
+|---------|--------|-------|
+| sched_ext | 6.12+ | ✅ Tespit edilir |
+| BORE Scheduler | CachyOS | ✅ Tespit edilir |
+| BBRv3 | 6.5+ | ✅ Otomatik seçim |
+| PREEMPT_RT | 6.12+ | ✅ Tespit edilir |
+| Btrfs noatime | All | ✅ Önerilir |
 
 ### I/O Scheduler Seçimi
 | Cihaz Tipi | Gaming | Desktop | Server |
