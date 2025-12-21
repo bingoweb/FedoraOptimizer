@@ -1394,53 +1394,277 @@ class FedoraOptimizer:
         return min(100, score), report
 
     def full_audit(self):
+        """Enhanced Deep System Audit with Category-Based Scoring"""
         from rich.table import Table
         from rich.align import Align
         from rich import box
+        from rich.columns import Columns
+        from rich.progress import Progress, SpinnerColumn, TextColumn
         import time
         
-        console.print("[bold magenta]🧠 YZ Destekli Derin Sistem Analizi...[/bold magenta]")
-        with console.status("[bold cyan]Donanım ve Kernel taranıyor...[/]"):
-            time.sleep(1.5)
-            dna = self.get_system_dna()
-            # Add Kernel Info
-            dna.append(f"[bold cyan]Kernel:[/] {platform.release()}")
+        console.print("\n[bold magenta]🧬 DERİN SİSTEM DNA ANALİZİ (2025 AI)[/bold magenta]\n")
         
-        # Show DNA
-        grid = Table.grid(expand=True)
-        grid.add_column()
+        # Category scores
+        scores = {
+            "cpu": {"score": 0, "max": 25, "items": []},
+            "memory": {"score": 0, "max": 25, "items": []},
+            "disk": {"score": 0, "max": 25, "items": []},
+            "network": {"score": 0, "max": 15, "items": []},
+            "kernel": {"score": 0, "max": 10, "items": []},
+        }
+        
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}"),
+            transient=True
+        ) as progress:
+            task = progress.add_task("Donanım profilleniyor...", total=5)
+            
+            # === CPU Analysis ===
+            progress.update(task, description="CPU analiz ediliyor...")
+            cpu = self.hw.cpu_microarch
+            
+            # CPU Vendor & Generation
+            if cpu.get('vendor') != 'Unknown':
+                scores["cpu"]["score"] += 5
+                scores["cpu"]["items"].append(("✓", f"{cpu['vendor']} {cpu.get('cpu_generation', '')}"))
+            
+            # Governor check
+            governor = cpu.get('governor', 'Unknown')
+            if governor in ['performance', 'schedutil']:
+                scores["cpu"]["score"] += 10
+                scores["cpu"]["items"].append(("✓", f"Governor: {governor} (optimal)"))
+            elif governor == 'powersave':
+                scores["cpu"]["score"] += 5
+                scores["cpu"]["items"].append(("!", f"Governor: {governor} (güç tasarrufu)"))
+            else:
+                scores["cpu"]["items"].append(("✗", f"Governor: {governor}"))
+            
+            # Scaling driver
+            driver = cpu.get('scaling_driver', 'Unknown')
+            if 'pstate' in driver:
+                scores["cpu"]["score"] += 10
+                scores["cpu"]["items"].append(("✓", f"Driver: {driver} (modern)"))
+            elif driver != 'Unknown':
+                scores["cpu"]["score"] += 5
+                scores["cpu"]["items"].append(("~", f"Driver: {driver}"))
+            
+            progress.advance(task)
+            
+            # === Memory Analysis ===
+            progress.update(task, description="Bellek analiz ediliyor...")
+            
+            # ZRAM check
+            s, out, _ = run_command("zramctl")
+            if s and "zram" in out:
+                scores["memory"]["score"] += 10
+                scores["memory"]["items"].append(("✓", "ZRAM aktif (sıkıştırılmış swap)"))
+            else:
+                scores["memory"]["items"].append(("!", "ZRAM kapalı"))
+            
+            # Swappiness check
+            try:
+                with open("/proc/sys/vm/swappiness", "r") as f:
+                    swp = int(f.read().strip())
+                if swp <= 20:
+                    scores["memory"]["score"] += 10
+                    scores["memory"]["items"].append(("✓", f"Swappiness: {swp} (SSD optimize)"))
+                elif swp <= 60:
+                    scores["memory"]["score"] += 5
+                    scores["memory"]["items"].append(("~", f"Swappiness: {swp} (varsayılan)"))
+                else:
+                    scores["memory"]["items"].append(("!", f"Swappiness: {swp} (yüksek)"))
+            except:
+                pass
+            
+            # THP check
+            kf = getattr(self.hw, 'kernel_features', {})
+            thp = kf.get('transparent_hugepages', 'Unknown')
+            if thp == 'madvise':
+                scores["memory"]["score"] += 5
+                scores["memory"]["items"].append(("✓", f"THP: {thp} (önerilen)"))
+            elif thp == 'always':
+                scores["memory"]["score"] += 3
+                scores["memory"]["items"].append(("~", f"THP: {thp}"))
+            
+            progress.advance(task)
+            
+            # === Disk Analysis ===
+            progress.update(task, description="Disk analiz ediliyor...")
+            
+            disk_type = self.hw.disk_info.lower()
+            if "nvme" in disk_type:
+                scores["disk"]["score"] += 10
+                scores["disk"]["items"].append(("✓", "NVMe SSD (maksimum hız)"))
+            elif "ssd" in disk_type:
+                scores["disk"]["score"] += 7
+                scores["disk"]["items"].append(("✓", "SATA SSD"))
+            else:
+                scores["disk"]["score"] += 3
+                scores["disk"]["items"].append(("~", "HDD (mekanik disk)"))
+            
+            # TRIM check
+            s, out, _ = run_command("systemctl is-enabled fstrim.timer")
+            if "enabled" in out:
+                scores["disk"]["score"] += 10
+                scores["disk"]["items"].append(("✓", "TRIM aktif (SSD ömrü korunuyor)"))
+            else:
+                scores["disk"]["items"].append(("✗", "TRIM kapalı - SSD için kritik!"))
+            
+            # I/O Scheduler
+            s, out, _ = run_command("cat /sys/block/$(lsblk -d -o NAME | grep -v loop | head -2 | tail -1)/queue/scheduler 2>/dev/null")
+            if s:
+                match = re.search(r'\[(\w+)\]', out)
+                if match:
+                    sched = match.group(1)
+                    scores["disk"]["score"] += 5
+                    scores["disk"]["items"].append(("✓", f"I/O Scheduler: {sched}"))
+            
+            progress.advance(task)
+            
+            # === Network Analysis ===
+            progress.update(task, description="Ağ analiz ediliyor...")
+            
+            # BBR check
+            s, out, _ = run_command("sysctl net.ipv4.tcp_congestion_control")
+            if s and "bbr" in out:
+                scores["network"]["score"] += 10
+                scores["network"]["items"].append(("✓", "TCP BBR aktif (hızlı transfer)"))
+            else:
+                scores["network"]["items"].append(("!", "TCP Cubic (eski algoritma)"))
+            
+            # TCP Fast Open
+            s, out, _ = run_command("sysctl net.ipv4.tcp_fastopen")
+            if s and "3" in out:
+                scores["network"]["score"] += 5
+                scores["network"]["items"].append(("✓", "TCP Fast Open aktif"))
+            else:
+                scores["network"]["items"].append(("~", "TCP Fast Open kapalı"))
+            
+            progress.advance(task)
+            
+            # === Kernel Analysis ===
+            progress.update(task, description="Kernel analiz ediliyor...")
+            
+            # PSI support
+            if kf.get('psi', False):
+                scores["kernel"]["score"] += 3
+                scores["kernel"]["items"].append(("✓", "PSI (Pressure Stall Info) aktif"))
+            
+            # cgroup v2
+            if kf.get('cgroup_v2', False):
+                scores["kernel"]["score"] += 3
+                scores["kernel"]["items"].append(("✓", "cgroup v2 (modern konteyner)"))
+            
+            # io_uring
+            if kf.get('io_uring', False):
+                scores["kernel"]["score"] += 2
+                scores["kernel"]["items"].append(("✓", "io_uring (hızlı I/O)"))
+            
+            # BPF
+            if kf.get('bpf', False):
+                scores["kernel"]["score"] += 2
+                scores["kernel"]["items"].append(("✓", "eBPF aktif"))
+            
+            progress.advance(task)
+        
+        # === Display DNA Report ===
+        console.print()
+        
+        # System Identity Panel
+        dna = self.get_system_dna()
+        dna.append(f"[bold cyan]Kernel:[/] {platform.release()}")
+        
+        # VM Warning
+        if cpu.get('is_vm', False):
+            dna.append(f"[bold yellow]⚠ VM:[/] {cpu.get('hypervisor', 'Unknown')} (sınırlı optimizasyon)")
+        
         dna_panel = Panel(
             "\n".join([f"[cyan]➤[/] {x}" for x in dna]),
-            title="[bold white]SİSTEM KİMLİĞİ (DNA)[/]",
+            title="[bold white]🧬 SİSTEM DNA[/]",
             border_style="cyan",
             padding=(1, 2)
         )
         console.print(dna_panel)
         
-        with console.status("[bold magenta]Optimizasyon matrisi ve Derin Ayarlar hesaplanıyor...[/]"):
-            time.sleep(1)
-            score, report_data = self.calculate_deep_score() # Use Deep Score
+        # === Category Score Tables ===
+        console.print()
         
-        # Show Report
-        if score >= 90: s_color = "green"
-        elif score >= 60: s_color = "yellow"
-        else: s_color = "red"
-        
-        table = Table(box=box.ROUNDED, expand=True, border_style="dim white")
-        table.add_column("DURUM", justify="center", style="bold", width=14)
-        table.add_column("BİLEŞEN", style="magenta", width=16)
-        table.add_column("TEKNİK DETAY", style="white")
-        
-        for st, c, d in report_data:
-            table.add_row(st, c, d)
+        def make_category_panel(name, emoji, data, color):
+            score_pct = int((data["score"] / data["max"]) * 100)
+            score_color = "green" if score_pct >= 80 else "yellow" if score_pct >= 50 else "red"
             
-        console.print(table)
+            items_text = "\n".join([
+                f"[{'green' if i[0]=='✓' else 'yellow' if i[0] in ['!','~'] else 'red'}]{i[0]}[/] {i[1]}" 
+                for i in data["items"]
+            ])
+            
+            return Panel(
+                f"{items_text}\n\n[bold {score_color}]Skor: {data['score']}/{data['max']}[/]",
+                title=f"[bold {color}]{emoji} {name}[/]",
+                border_style=color,
+                width=40
+            )
         
-        console.print(Panel(
-            Align.center(f"[bold {s_color}]GENEL SAĞLIK SKORU: {score}/100[/]", vertical="middle"),
-            border_style=s_color,
-            padding=(1, 2)
-        ))
+        # Row 1: CPU and Memory
+        row1 = Columns([
+            make_category_panel("CPU", "⚡", scores["cpu"], "blue"),
+            make_category_panel("BELLEK", "🧠", scores["memory"], "magenta"),
+        ], equal=True, expand=True)
+        console.print(row1)
         
-        if score < 95:
-             console.print("\n[bold]TAVSİYE:[/bold] [cyan]6. Tam Otomatik Optimizasyon[/cyan] seçeneği tüm eksikleri tek seferde giderir.")
+        # Row 2: Disk and Network
+        row2 = Columns([
+            make_category_panel("DİSK", "💾", scores["disk"], "cyan"),
+            make_category_panel("AĞ", "🌐", scores["network"], "green"),
+        ], equal=True, expand=True)
+        console.print(row2)
+        
+        # === Total Score ===
+        total_score = sum(s["score"] for s in scores.values())
+        total_max = sum(s["max"] for s in scores.values())
+        final_score = int((total_score / total_max) * 100)
+        
+        if final_score >= 85:
+            score_color = "green"
+            verdict = "MÜKEMMEL"
+        elif final_score >= 70:
+            score_color = "yellow"
+            verdict = "İYİ"
+        elif final_score >= 50:
+            score_color = "orange1"
+            verdict = "ORTA"
+        else:
+            score_color = "red"
+            verdict = "GELİŞTİRİLMELİ"
+        
+        console.print()
+        score_display = f"""
+[bold {score_color}]
+╔══════════════════════════════════════╗
+║                                      ║
+║   GENEL SAĞLIK SKORU: {final_score:3d}/100        ║
+║   DEĞERLENDIRME: {verdict:^17}   ║
+║                                      ║
+╚══════════════════════════════════════╝
+[/]"""
+        console.print(Align.center(score_display))
+        
+        # === Recommendations ===
+        if final_score < 95:
+            console.print("\n[bold yellow]📋 ÖNERİLER:[/bold yellow]")
+            
+            if scores["disk"]["score"] < 20:
+                console.print("  • [cyan]TRIM[/] aktifleştirin: [dim]sudo systemctl enable --now fstrim.timer[/dim]")
+            
+            if scores["network"]["score"] < 10:
+                console.print("  • [cyan]BBR[/] aktifleştirin: [dim]3. Tam Otomatik Optimizasyon[/dim]")
+            
+            if scores["memory"]["score"] < 15:
+                console.print("  • [cyan]ZRAM[/] aktifleştirin: [dim]sudo dnf install zram-generator[/dim]")
+            
+            if scores["cpu"]["score"] < 15:
+                console.print("  • [cyan]CPU Governor[/] ayarlayın: [dim]4. Oyun Modu veya tuned-adm[/dim]")
+            
+            console.print("\n[bold]💡 İPUCU:[/] [green]3. TAM OPTİMİZASYON[/] tüm eksikleri tek seferde giderir.")
+
