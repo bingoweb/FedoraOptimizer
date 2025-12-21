@@ -24,37 +24,84 @@ class HardwareDetector:
         self.bios_info = self._get_bios_settings()
     
     def _get_cpu_microarchitecture(self):
-        """Detect Intel P/E cores, AMD CCX topology, and CPU architecture"""
+        """Universal CPU Architecture Detection - Works on Intel, AMD, ARM, VM"""
         info = {
             "vendor": "Unknown",
             "family": "Unknown",
+            "model_name": "Unknown",
+            "arch": "x86_64",  # x86_64, aarch64, etc.
             "hybrid": False,
             "p_cores": 0,
             "e_cores": 0,
+            "total_cores": 0,
+            "total_threads": 0,
             "topology": "Unknown",
             "has_avx512": False,
             "has_avx2": False,
             "governor": "Unknown",
-            "epp": "Unknown"
+            "scaling_driver": "Unknown",  # intel_pstate, amd_pstate, acpi-cpufreq
+            "epp": "Unknown",
+            "is_vm": False,
+            "hypervisor": None,
+            "cpu_generation": "Unknown",  # Zen3, Alder Lake, etc.
         }
         try:
-            # Vendor detection
+            # Architecture detection
+            s, out, _ = run_command("uname -m")
+            if s:
+                info["arch"] = out.strip()
+            
+            # VM/Hypervisor detection
+            s, out, _ = run_command("systemd-detect-virt")
+            if s and out.strip() and out.strip() != "none":
+                info["is_vm"] = True
+                info["hypervisor"] = out.strip()
+            
+            # Parse /proc/cpuinfo for detailed info
             with open("/proc/cpuinfo", "r") as f:
                 content = f.read()
+                
+                # Vendor detection
                 if "GenuineIntel" in content:
                     info["vendor"] = "Intel"
                 elif "AuthenticAMD" in content:
                     info["vendor"] = "AMD"
+                elif "ARM" in content.upper() or info["arch"] == "aarch64":
+                    info["vendor"] = "ARM"
                 
-                # Check for AVX support
-                if "avx512" in content.lower():
-                    info["has_avx512"] = True
-                if "avx2" in content.lower():
-                    info["has_avx2"] = True
+                # Model name
+                for line in content.split('\n'):
+                    if "model name" in line.lower():
+                        info["model_name"] = line.split(':')[1].strip()
+                        break
+                    elif "Model" in line and info["vendor"] == "ARM":
+                        info["model_name"] = line.split(':')[1].strip()
+                        break
+                
+                # AVX support (x86 only)
+                if info["arch"] == "x86_64":
+                    if "avx512" in content.lower():
+                        info["has_avx512"] = True
+                    if "avx2" in content.lower():
+                        info["has_avx2"] = True
             
-            # Intel Hybrid Detection (Alder Lake+)
+            # Core/Thread count
+            s, out, _ = run_command("nproc --all")
+            if s:
+                info["total_threads"] = int(out.strip())
+            
+            s, out, _ = run_command("lscpu | grep '^CPU(s):' | awk '{print $2}'")
+            if s and out.strip():
+                info["total_cores"] = int(out.strip())
+            
+            # Scaling driver detection (critical for optimization strategy)
+            s, out, _ = run_command("cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver 2>/dev/null")
+            if s:
+                info["scaling_driver"] = out.strip()
+            
+            # Intel-specific detection
             if info["vendor"] == "Intel":
-                # Check for hybrid architecture via sysfs
+                # Hybrid architecture detection (Alder Lake+)
                 s, out, _ = run_command("cat /sys/devices/cpu_core/cpus 2>/dev/null")
                 if s and out.strip():
                     info["hybrid"] = True
@@ -77,24 +124,59 @@ class HardwareDetector:
                             info["e_cores"] = len(e_cores_str.split(","))
                     
                     info["topology"] = f"{info['p_cores']}P + {info['e_cores']}E Hibrit"
+                    info["cpu_generation"] = "Alder Lake+"
                 else:
-                    # Non-hybrid Intel
-                    info["topology"] = "Standart (Homojen)"
+                    info["topology"] = "Homojen"
+                    # Try to guess generation from model name
+                    if "13th" in info["model_name"] or "14th" in info["model_name"]:
+                        info["cpu_generation"] = "Raptor Lake"
+                    elif "12th" in info["model_name"]:
+                        info["cpu_generation"] = "Alder Lake"
+                    elif "11th" in info["model_name"]:
+                        info["cpu_generation"] = "Tiger Lake"
+                    elif "10th" in info["model_name"]:
+                        info["cpu_generation"] = "Ice Lake"
             
-            # AMD CCX/CCD detection
+            # AMD-specific detection
             elif info["vendor"] == "AMD":
+                # Check for Zen architecture via amd_pstate or family
+                if "amd_pstate" in info["scaling_driver"] or "amd-pstate" in info["scaling_driver"]:
+                    info["cpu_generation"] = "Zen 2+"  # amd_pstate requires Zen 2+
+                
+                # CCX/CCD topology
                 s, out, _ = run_command("lscpu | grep 'L3 cache'")
-                if s:
-                    info["topology"] = "Zen CCX/CCD Mimarisi"
+                if s and out.strip():
+                    # Multiple L3 caches indicate multiple CCDs
+                    info["topology"] = "Zen CCX/CCD"
+                else:
+                    info["topology"] = "Klasik AMD"
+                
+                # Try to detect Zen generation from model
+                model = info["model_name"].lower()
+                if "7000" in model or "9000" in model:
+                    info["cpu_generation"] = "Zen 4"
+                elif "5000" in model or "6000" in model:
+                    info["cpu_generation"] = "Zen 3"
+                elif "3000" in model or "4000" in model:
+                    info["cpu_generation"] = "Zen 2"
+                elif "2000" in model:
+                    info["cpu_generation"] = "Zen+"
+                elif "1000" in model:
+                    info["cpu_generation"] = "Zen 1"
+            
+            # ARM-specific detection
+            elif info["vendor"] == "ARM":
+                info["topology"] = "ARM big.LITTLE" if "big" in info["model_name"].lower() else "ARM Homojen"
+                info["cpu_generation"] = "ARM"
             
             # Current governor
             s, out, _ = run_command("cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null")
             if s:
                 info["governor"] = out.strip()
             
-            # Intel EPP (Energy Performance Preference)
+            # EPP (Energy Performance Preference) - Intel/AMD
             s, out, _ = run_command("cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null")
-            if s:
+            if s and out.strip():
                 info["epp"] = out.strip()
                 
         except Exception:
@@ -431,12 +513,26 @@ class SysctlOptimizer:
         return max(min_val, min(max_val, calculated))
     
     def generate_optimized_config(self, persona: str = "general") -> dict:
-        """Generate optimized sysctl parameters based on hardware and persona"""
+        """Generate optimized sysctl parameters based on detected hardware - UNIVERSAL"""
         disk_type = self.get_disk_type()
         chassis = self.hw.chassis.lower()
         tweaks = {}
         
-        # Memory parameters
+        # Get CPU info for vendor-specific optimizations
+        cpu_info = getattr(self.hw, 'cpu_microarch', {})
+        is_vm = cpu_info.get('is_vm', False)
+        cpu_vendor = cpu_info.get('vendor', 'Unknown')
+        
+        # Skip aggressive tweaks on VMs
+        if is_vm:
+            console.print("[dim]VM tespit edildi - Minimal tweaks uygulanacak[/dim]")
+            # Only apply safe network tweaks for VMs
+            tweaks["net.ipv4.tcp_congestion_control"] = "bbr"
+            tweaks["net.core.default_qdisc"] = "fq"
+            tweaks["net.ipv4.tcp_fastopen"] = "3"
+            return tweaks
+        
+        # Memory parameters based on disk type
         for param, values in self.MEMORY_PARAMS.items():
             if isinstance(values, dict):
                 if "auto" in values and values["auto"]:
@@ -453,11 +549,32 @@ class SysctlOptimizer:
                 elif "default" in values:
                     tweaks[param] = str(values["default"])
         
-        # Network parameters
+        # Network parameters (universal)
         for param, value in self.NETWORK_PARAMS.items():
             tweaks[param] = str(value)
         
-        # Latency parameters for desktop/gamer
+        # Form factor specific adjustments
+        if chassis == "laptop":
+            # Laptop: Balance performance and power
+            tweaks["vm.laptop_mode"] = "5"
+            tweaks["vm.dirty_writeback_centisecs"] = "1500"  # Less frequent writes
+        elif chassis == "server":
+            # Server: Maximize throughput
+            tweaks["vm.dirty_ratio"] = "40"
+            tweaks["vm.dirty_background_ratio"] = "10"
+            tweaks["net.core.somaxconn"] = "65535"
+        
+        # CPU vendor specific tweaks
+        if cpu_vendor == "AMD":
+            # AMD Zen specific: better NUMA awareness
+            tweaks["kernel.numa_balancing"] = "1"
+        elif cpu_vendor == "Intel":
+            # Intel: EPP-aware systems benefit from these
+            if cpu_info.get('hybrid', False):
+                # Hybrid CPUs: scheduler awareness
+                tweaks["kernel.sched_itmt_enabled"] = "1"  # Intel Thread Director
+        
+        # Latency parameters for desktop/gamer (not server)
         if persona.lower() in ["gamer", "oyuncu", "geliştirici", "dev"] or chassis == "desktop":
             for param, value in self.LATENCY_PARAMS.items():
                 tweaks[param] = str(value)
