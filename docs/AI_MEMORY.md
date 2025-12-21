@@ -1,79 +1,89 @@
 # Fedora Optimizer - AI Development Memory 🧠
 
+**Current Version:** v0.2.5 (Hardware Intelligence Release)
 **Last Updated:** 2025-12-21
-**Project Status:** Active / Optimization-Focused v2.0
-**Core Tech:** Python 3, `rich` (TUI), `psutil`, `subprocess`
+**Repository:** `https://github.com/bingoweb/FedoraOptimizer`
 
-## 🌟 Project Overview
-A dedicated AI-Powered System Optimization Tool for Fedora Linux. This project focuses solely on optimization - no cleaner, no uninstaller, no security module. **One job, done exceptionally well.**
+---
 
-## 📂 Architecture
+## 🏗️ Architecture & Core Logic
 
-### Directory Structure (Streamlined)
-```
-fedoraclean/
-├── run.sh              # Entry point (sudo ./run.sh)
-├── setup.sh            # Virtual environment setup
-├── requirements.txt    # Python dependencies
-├── docs/
-│   └── AI_MEMORY.md    # This file
-└── src/
-    ├── modules/
-    │   ├── optimizer.py   # THE BRAIN - All optimization logic
-    │   ├── gaming.py      # Gaming mode optimizations
-    │   ├── utils.py       # Shared utilities & Theme
-    │   └── logger.py      # Debug logging
-    └── ui/
-        ├── tui_app.py     # Main TUI application
-        ├── dashboard.py   # System monitoring widgets
-        └── input_helper.py # Keyboard input handling
-```
+The project has evolved into a monolithic but modular AI engine located in `src/modules/optimizer.py`.
 
-## 🤖 Core Components
+### 1. `HardwareDetector` Class
+The "Eyes" of the system. Responsibilities:
+- **Universal Detection:** Identifies CPU (Hybrid/Zen), Disk (NVMe/SATA), Chassis (Laptop/Desktop).
+- **Workload Detection:** Scans installed binaries (`steam`, `docker`, `nginx`) to determine usage profile.
+- **2025 Tech:** Detects `sched_ext`, `BBRv3` capability, `PSI` pressure data.
 
-### 1. HardwareDetector (Deep Profiling)
-- CPU Microarchitecture (Intel P/E cores, AMD Zen CCX)
-- NVMe SMART health data
-- Kernel features (cgroup_v2, io_uring, PSI, sched_ext)
-- BIOS/DMI settings (Secure Boot, Virtualization)
+### 2. `AIOptimizationEngine` Class
+The "Brain" of the system. Implements the workflow:
+`SCAN` → `ANALYZE` → `EXPLAIN` → `CONFIRM` → `APPLY`
 
-### 2. SysctlOptimizer (30+ Parameters)
-| Category | Parameters |
-|----------|------------|
-| Memory | vm.swappiness, vm.dirty_ratio, vm.vfs_cache_pressure |
-| Network | tcp_congestion_control=bbr, tcp_fastopen=3 |
-| I/O | dirty_expire_centisecs, dirty_writeback_centisecs |
+- **Analysis Logic:**
+  - **Profile Rules:** e.g., If `Gamer` profile -> Apply `vm.max_map_count`.
+  - **Hardware Rules:** e.g., If `Laptop` -> Increase `dirty_writeback_centisecs`.
+  - **Kernel Rules:** e.g., If `bbr` missing -> Enable it.
 
-### 3. IOSchedulerOptimizer
-Dynamic scheduler selection based on device type and workload:
-- NVMe: `none` or `mq-deadline`
-- SSD: `bfq` or `mq-deadline`
-- HDD: `bfq`
-
-### 4. GamingOptimizer
-- GameMode integration
-- CPU governor control
-- KDE compositor toggle
-- BORE scheduler detection
-
-### 5. OptimizationBackup
-- Automatic snapshots before optimization
-- One-click rollback
-
-## 🎯 TUI Menu Structure
-```
-1. 🔍 DERİN TARAMA      - Sistem DNA analizi
-2. ⚡ HIZLI OPTİMİZE    - Temel optimizasyonlar
-3. 🚀 TAM OPTİMİZASYON  - Tüm AI özellikleri
-4. 🎮 OYUN MODU        - Gaming optimizasyonu
-5. 💾 I/O SCHEDULER    - Disk zamanlayıcı
-6. 🌐 AĞ OPTİMİZE      - TCP/BBR ayarları
-7. 🔧 KERNEL AYAR      - Sysctl parametreleri
-8. ↩️ GERİ AL          - Rollback
-0. ❌ ÇIKIŞ
+### 3. `OptimizationProposal` Data Class
+Standardized format for every change request:
+```python
+@dataclass
+class OptimizationProposal:
+    param: str        # e.g., "vm.swappiness"
+    current: str      # e.g., "60"
+    proposed: str     # e.g., "10"
+    reason: str       # AI reasoning displayed to user
+    category: str     # cpu, memory, network, gaming...
+    priority: str     # critical, recommended, optional
+    command: str      # Optional (if not simple sysctl)
 ```
 
-## ⚠️ Critical Notes
-- **Root Required:** App runs via `sudo ./run.sh`
-- **Idempotency:** All methods check before applying
-- **Backup First:** Full optimization creates automatic backup
+---
+
+## 🌟 Implemented Features (Development Areas)
+
+### Area 1: 2025 Kernel Technologies (v0.2.1)
+- **BBRv3:** Smart detection of available congestion controls (`bbr`, `bbr2`, `bbr3`).
+- **PSI (Pressure Stall Information):** Reads `/proc/pressure` to measure CPU/IO stress.
+- **sched_ext:** Detects and reports Extensible Scheduler status (Kernel 6.12+).
+
+### Area 2: Deep DNA Reporting (v0.2.3)
+- **0-100 Scoring System:**
+  - **CPU (25p):** Governor, Hybrid logic, PSI.
+  - **RAM (25p):** ZRAM, Swappiness, THP.
+  - **Disk (25p):** Scheduler, TRIM, Health.
+  - **Net (15p):** BBR, TFO.
+  - **Kernel (10p):** Modern features.
+- **Visualization:** ASCII Progress Bars in TUI (`[██████░░░░]`).
+
+### Area 3: Smart Profile Management (v0.2.4)
+- **Detective Mode:** Auto-detects installed software.
+- **Profiles:**
+  - 🎮 **Gamer:** `steam`, `lutris` → Tune `max_map_count`, `cfs_period`.
+  - 👨‍💻 **Developer:** `docker`, `vscode` → Tune `inotify_watches`.
+  - 🏢 **Server:** `nginx` → Tune `somaxconn`.
+
+### Area 4: Hardware-Aware AI Tuning (v0.2.5)
+- **Form Factor Intelligence:**
+  - **Laptop (`🔋`):** Optimizes for battery (`vm.dirty_writeback_centisecs=6000`).
+  - **Desktop (`⚡`):** Optimizes for performance (`governor=performance`).
+- **CPU Intelligence:**
+  - **Intel Hybrid:** Enforces `sched_itmt` (Thread Director).
+  - **AMD Zen:** Checks `amd_pstate` status.
+
+---
+
+## 🔄 Deployment & CI/CD
+- **Semantic Versioning:** `v0.x.x`
+- **GitHub Actions:** Automatically generates detailed release notes from commit history (Body & Subject).
+- **Rollback:** Transaction-based rollback system (`transactions.json`).
+
+## 🗺️ Next Steps (Future)
+- **I/O Scheduler AI:** Deeper analysis of NVMe vs SATA scheduler (kyber vs bfq vs none).
+- **Dashboard Mode:** Real-time monitoring TUI.
+- **Benchmark Integration:** Before/After performance metrics.
+
+---
+
+**Use this memory file to quickly understand the project state when resuming development.**

@@ -962,6 +962,8 @@ class AIOptimizationEngine:
             "vm.max_map_count",
             "kernel.sched_cfs_bandwidth_slice_us",
             "fs.inotify.max_user_watches",
+            "vm.dirty_writeback_centisecs",
+            "kernel.sched_itmt_enabled",
         ]
         
         current_values = self.scan_current_sysctl(params_to_check)
@@ -1109,6 +1111,50 @@ class AIOptimizationEngine:
                     reason="[DEV] IDE ve Docker için dosya izleme limitini artırır.",
                     category="system",
                     priority="recommended"
+                ))
+        
+        # === HARDWARE AWARE TUNING (Area 4) ===
+        chassis = state.get("chassis", "desktop")
+        
+        # 1. Laptop Intelligence
+        if chassis in ["notebook", "laptop", "convertible", "portable"]:
+            # Battery Saver: Disk Writeback
+            curr_wb = current_values.get("vm.dirty_writeback_centisecs", "500")
+            if curr_wb != "6000":
+                self.proposals.append(OptimizationProposal(
+                    param="vm.dirty_writeback_centisecs",
+                    current=curr_wb,
+                    proposed="6000",
+                    reason="[LAPTOP] Pil ömrü için diski daha az sık uyandırır (15sn -> 60sn).",
+                    category="power",
+                    priority="recommended"
+                ))
+        
+        elif chassis in ["desktop", "tower", "server"]:
+            # Desktop Performance
+            curr_gov = state.get("governor", "powersave")
+            if curr_gov != "performance" and "intel" in state.get("cpu_vendor", "").lower():
+                 self.proposals.append(OptimizationProposal(
+                    param="CPU Governor",
+                    current=curr_gov,
+                    proposed="performance",
+                    reason="[DESKTOP] Masaüstü bilgisayarlar için maksimum işlemci performansı.",
+                    category="cpu",
+                    priority="optional",
+                    command="cpupower frequency-set -g performance"
+                 ))
+
+        # 2. Intel Hybrid Intelligence
+        if state.get("cpu_hybrid", False):
+            curr_itmt = current_values.get("kernel.sched_itmt_enabled", "0")
+            if curr_itmt != "1":
+                self.proposals.append(OptimizationProposal(
+                    param="kernel.sched_itmt_enabled",
+                    current=curr_itmt,
+                    proposed="1",
+                    reason="[INTEL HYBRID] P-Core ve E-Core çekirdeklerini doğru yönetmek için Thread Director (ITMT) şarttır.",
+                    category="cpu",
+                    priority="critical"
                 ))
         
         return self.proposals
@@ -1849,7 +1895,8 @@ class FedoraOptimizer:
             dna.append(f"[bold cyan]  └─ NVMe Sağlık:[/] Temp: {nvme['temperature']} | Aşınma: {nvme['wear_level']} | Yazılan: {nvme['data_written_tb']}")
         
         dna.append(f"[bold cyan]AĞ:[/] {self.hw.net_info}")
-        dna.append(f"[bold cyan]TİP:[/] {self.hw.chassis}")
+        icon = "🔋" if self.hw.chassis.lower() in ["notebook", "laptop"] else "⚡"
+        dna.append(f"[bold cyan]TİP:[/] {self.hw.chassis} {icon}")
         
         # BIOS Info
         if hasattr(self.hw, 'bios_info'):

@@ -242,10 +242,10 @@ fedoraclean/
 
 ---
 
-### v0.2.4 (December 2025) - Intelligence
-- 🧠 **Smart Profile Management**: Auto-detects Gamer/Dev/Server workloads
-- 🎯 **Targeted Optimizations**: Profile-specific sysctl tuning (e.g., Steam fixes)
-- 📊 **Deep DNA Reporting**: Visual progress bars and 100-point scoring system
+### v0.2.5 (December 2025) - Context Aware
+- ⚡ **Hardware AI**: Adapts to Laptop/Desktop form factors and CPU architectures
+- 🔋 **Smart Power**: Auto-tunes disk writeback for battery life
+- 🧠 **Smart Profiles**: Workload detection (Gaming/Dev/Server)
 - ✨ AI-Driven Optimization Workflow
 - ↩️ Transaction-Based Rollback System
 - 🔍 Universal Hardware Detection
