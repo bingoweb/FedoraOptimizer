@@ -22,7 +22,7 @@
 ## 📦 Kurulum
 
 ```bash
-git clone https://github.com/taylansoylu/fedoraclean.git
+git clone https://github.com/bingoweb/fedoraclean.git
 cd fedoraclean
 chmod +x setup.sh run.sh
 ./setup.sh
@@ -117,7 +117,7 @@ MIT License - Detaylar için [LICENSE](LICENSE) dosyasına bakın.
 ## 👤 Geliştirici
 
 **Taylan Soylu**
-- GitHub: [@taylansoylu](https://github.com/taylansoylu)
+- GitHub: [@bingoweb](https://github.com/bingoweb)
 - Email: taylansoylu@gmail.com
 
 ---
