@@ -244,7 +244,8 @@ fedoraclean/
 
 ## 🔄 Changelog
 
-### v2.0.0 (December 2025)
+### v0.2.1 (December 2025) - Current
+- 🚀 **2025 Kernel Tech**: BBRv3 detection, PSI metrics, sched_ext support
 - ✨ AI-Driven Optimization Workflow
 - ↩️ Transaction-Based Rollback System
 - 🔍 Universal Hardware Detection
