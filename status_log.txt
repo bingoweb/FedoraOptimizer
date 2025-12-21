@@ -1,0 +1,57 @@
+Üzerinde bulunulan dal: main
+Dalınız 'origin/main' dalından 1 işleme ileride.
+  (yerel işlemelerinizi yayımlamak için "git push" kullanın)
+
+İzlenmeyen dosyalar:
+  (işlenecekler arasına koymak için "git add <dosya>..." kullanın)
+	.gitignore
+	status_log.txt
+
+işlemeye bir şey eklenmedi; ancak izlenmeyen dosyalar var
+  (izlemek için "git add" kullanın)
+commit a69d96cc7e040b47822be5163a54d808225f1105
+Author: Taylan Soylu <taylansoylu@gmail.com>
+Date:   Sun Dec 21 21:02:24 2025 +0300
+
+    ✨ Feat: Add BBRv3 detection, PSI metrics, and sched_ext support (2025 Kernel Tech)
+
+commit f0de58c871ec3a9a87af1215916f40517c04d7d0
+Author: Taylan Soylu <taylansoylu@gmail.com>
+Date:   Sun Dec 21 20:48:50 2025 +0300
+
+    📝 Docs: Add Compatibility & Limitations section
+
+commit 3b80a84f1d5d16f5304d2352d241b8b536d1cd99
+Author: Taylan Soylu <taylansoylu@gmail.com>
+Date:   Sun Dec 21 20:46:18 2025 +0300
+
+    🔧 Final Polish: Critical bug fixes, rollback system, and modern docs
+
+commit bcfcf7b266a2fcf9c033ca9abf16cf7cefe6fc9b
+Author: Taylan Soylu <taylansoylu@gmail.com>
+Date:   Sun Dec 21 20:15:07 2025 +0300
+
+    feat: AI-Driven Optimization Workflow with scan-analyze-explain-confirm pattern
+    
+    - Added OptimizationProposal dataclass for structured change proposals
+    - Added AIOptimizationEngine class with full workflow:
+      - scan_current_state(): Deep system state scan
+      - analyze_and_propose_sysctl(): AI-powered optimization analysis
+      - analyze_network_only(): Network-specific proposals
+      - analyze_io_scheduler(): I/O scheduler optimization proposals
+      - display_proposals(): Rich formatted table with explanations
+      - apply_proposals(): Safe apply with backup and persistence
+    
+    - Updated TUI menu handlers:
+      - Quick Optimize (key 2): Now shows proposals first
+      - I/O Scheduler (key 5): AI-driven analysis with confirmation
+      - Network Optimize (key 6): BBR, TFO, buffer analysis
+      - Kernel Tuning (key 7): Full sysctl proposal workflow
+    
+    All changes require user confirmation before applying.
+
+commit bb5e8234c6a7527b9ad4b986989ac9aa1e17815a
+Author: Taylan Soylu <taylansoylu@gmail.com>
+Date:   Sun Dec 21 20:00:44 2025 +0300
+
+    🚀 Feat: 2025 Kernel features (sched_ext, BORE, BBRv3, Btrfs) + 45 sysctl params

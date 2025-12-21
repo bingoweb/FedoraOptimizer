@@ -1,0 +1,19 @@
+************* Module optimizer
+src/modules/optimizer.py:1992:0: C0301: Line too long (165/160) (line-too-long)
+src/modules/optimizer.py:221:16: W0404: Reimport 'json' (imported line 9) (reimported)
+src/modules/optimizer.py:580:16: W0612: Unused variable 's2' (unused-variable)
+src/modules/optimizer.py:683:8: W0404: Reimport 'datetime' (imported line 13) (reimported)
+src/modules/optimizer.py:1987:8: W0612: Unused variable 's_ok' (unused-variable)
+src/modules/optimizer.py:2030:8: W0612: Unused variable 's_ok' (unused-variable)
+src/modules/optimizer.py:2085:8: W0612: Unused variable 's' (unused-variable)
+src/modules/optimizer.py:2098:12: W0612: Unused variable 't' (unused-variable)
+src/modules/optimizer.py:2124:8: W0612: Unused variable 's_z' (unused-variable)
+src/modules/optimizer.py:2141:12: W0612: Unused variable 's_p' (unused-variable)
+src/modules/optimizer.py:2175:8: W0612: Unused variable 's' (unused-variable)
+src/modules/optimizer.py:2288:8: W0612: Unused variable 's' (unused-variable)
+src/modules/optimizer.py:2322:16: W0612: Unused variable 'out' (unused-variable)
+src/modules/optimizer.py:2710:22: E0602: Undefined variable 'Align' (undefined-variable)
+
+------------------------------------------------------------------
+Your code has been rated at 9.88/10 (previous run: 9.88/10, +0.00)
+
