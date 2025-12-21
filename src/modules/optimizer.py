@@ -344,7 +344,7 @@ class HardwareDetector:
             
             # TCP ECN
             s, out, _ = run_command("sysctl net.ipv4.tcp_ecn 2>/dev/null")
-            features["tcp_ecn"] = s and "1" in out or "2" in out
+            features["tcp_ecn"] = s and ("1" in out or "2" in out)
             
             # zswap
             s, out, _ = run_command("cat /sys/module/zswap/parameters/enabled 2>/dev/null")
@@ -530,8 +530,10 @@ class HardwareDetector:
 # 2025 AI-DRIVEN OPTIMIZATION ENGINE
 # ============================================================================
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict, Optional
+import json
+import uuid
 
 @dataclass
 class OptimizationProposal:
@@ -543,6 +545,252 @@ class OptimizationProposal:
     category: str        # "memory", "network", "scheduler", "disk", "boot"
     priority: str        # "critical", "recommended", "optional"
     command: str = ""    # Command to apply (for non-sysctl)
+
+
+@dataclass
+class OptimizationTransaction:
+    """Record of applied optimization changes for rollback"""
+    id: str                          # Unique transaction ID
+    timestamp: str                   # When applied
+    category: str                    # "quick", "kernel", "network", "io", "gaming"
+    description: str                 # Human-readable description
+    changes: List[Dict] = field(default_factory=list)  # [{param, old, new}]
+
+
+class TransactionManager:
+    """
+    Transaction-based rollback manager
+    
+    Tracks all optimization changes and allows:
+    - undo_last(): Undo the most recent transaction
+    - undo_by_id(): Undo a specific transaction
+    - list_transactions(): View all recorded transactions
+    """
+    
+    TRANSACTION_FILE = "/var/lib/fedoraclean/transactions.json"
+    
+    def __init__(self):
+        os.makedirs(os.path.dirname(self.TRANSACTION_FILE), exist_ok=True)
+        self._ensure_file()
+    
+    def _ensure_file(self):
+        if not os.path.exists(self.TRANSACTION_FILE):
+            with open(self.TRANSACTION_FILE, "w") as f:
+                json.dump([], f)
+    
+    def _load_transactions(self) -> List[Dict]:
+        try:
+            with open(self.TRANSACTION_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
+    
+    def _save_transactions(self, transactions: List[Dict]):
+        try:
+            with open(self.TRANSACTION_FILE, "w") as f:
+                json.dump(transactions, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            console.print(f"[red]Transaction kayıt hatası: {e}[/red]")
+    
+    def record_transaction(self, category: str, description: str, 
+                          changes: List[Dict]) -> str:
+        """
+        Record a new transaction
+        
+        Args:
+            category: Type of optimization (quick, kernel, network, io, gaming)
+            description: Human-readable description
+            changes: List of {param, old, new} dicts
+        
+        Returns:
+            Transaction ID
+        """
+        import datetime
+        
+        tx_id = str(uuid.uuid4())[:8]
+        transaction = {
+            "id": tx_id,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "category": category,
+            "description": description,
+            "changes": changes
+        }
+        
+        transactions = self._load_transactions()
+        transactions.append(transaction)
+        
+        # Keep only last 50 transactions
+        if len(transactions) > 50:
+            transactions = transactions[-50:]
+        
+        self._save_transactions(transactions)
+        return tx_id
+    
+    def list_transactions(self, limit: int = 10) -> List[Dict]:
+        """List recent transactions, most recent first"""
+        transactions = self._load_transactions()
+        return list(reversed(transactions[-limit:]))
+    
+    def get_last_transaction(self) -> Optional[Dict]:
+        """Get the most recent transaction"""
+        transactions = self._load_transactions()
+        return transactions[-1] if transactions else None
+    
+    def undo_last(self) -> bool:
+        """Undo the most recent transaction"""
+        last = self.get_last_transaction()
+        if not last:
+            console.print("[yellow]Geri alınacak işlem yok.[/yellow]")
+            return False
+        
+        return self.undo_by_id(last["id"])
+    
+    def undo_by_id(self, tx_id: str) -> bool:
+        """
+        Undo a specific transaction by restoring old values
+        
+        Returns True if successful
+        """
+        transactions = self._load_transactions()
+        
+        # Find the transaction
+        target = None
+        for tx in transactions:
+            if tx["id"] == tx_id:
+                target = tx
+                break
+        
+        if not target:
+            console.print(f"[red]İşlem bulunamadı: {tx_id}[/red]")
+            return False
+        
+        console.print(f"[yellow]↩️ Geri alınıyor: {target['description']}[/yellow]")
+        console.print(f"[dim]Tarih: {target['timestamp'][:16]}[/dim]\n")
+        
+        restored = 0
+        failed = 0
+        
+        for change in target["changes"]:
+            param = change["param"]
+            old_value = change["old"]
+            
+            # Check if it's a sysctl parameter or a command
+            if param.startswith("/") or "." not in param:
+                # Special case: I/O scheduler or file path
+                if "Scheduler" in param:
+                    # Extract device from param like "I/O Scheduler (nvme0n1)"
+                    import re
+                    match = re.search(r'\((\w+)\)', param)
+                    if match:
+                        dev = match.group(1)
+                        sched_path = f"/sys/block/{dev}/queue/scheduler"
+                        # Fix: Use sh -c for proper sudo echo redirection
+                        s, _, _ = run_command(f"sh -c 'echo {old_value} > {sched_path}'", sudo=True)
+                        if s:
+                            console.print(f"  [green]✓[/] {param}: {old_value}")
+                            restored += 1
+                        else:
+                            failed += 1
+                else:
+                    # Skip non-restorable items
+                    console.print(f"  [dim]⊘ {param}: Geri alınamaz[/dim]")
+            else:
+                # Standard sysctl parameter
+                s, _, _ = run_command(f"sysctl -w {param}={old_value}", sudo=True)
+                if s:
+                    console.print(f"  [green]✓[/] {param} = {old_value}")
+                    restored += 1
+                else:
+                    console.print(f"  [red]✗[/] {param}: Geri alınamadı")
+                    failed += 1
+        
+        # Remove transaction from history
+        transactions = [tx for tx in transactions if tx["id"] != tx_id]
+        self._save_transactions(transactions)
+        
+        # Update sysctl config file - remove the applied changes
+        self._cleanup_sysctl_config(target["changes"])
+        
+        console.print(f"\n[green]✓ {restored} parametre geri alındı.[/green]")
+        if failed > 0:
+            console.print(f"[yellow]⚠ {failed} parametre geri alınamadı.[/yellow]")
+        
+        return True
+    
+    def _cleanup_sysctl_config(self, changes: List[Dict]):
+        """Remove applied changes from sysctl config file"""
+        conf_files = [
+            "/etc/sysctl.d/99-fedoraclean-ai.conf",
+            "/etc/sysctl.d/99-fedoraclean-net.conf"
+        ]
+        
+        params_to_remove = [c["param"] for c in changes if "." in c["param"]]
+        
+        for conf_file in conf_files:
+            if not os.path.exists(conf_file):
+                continue
+            
+            try:
+                with open(conf_file, "r") as f:
+                    lines = f.readlines()
+                
+                # Filter out lines containing removed parameters
+                new_lines = []
+                for line in lines:
+                    keep = True
+                    for param in params_to_remove:
+                        if line.strip().startswith(param):
+                            keep = False
+                            break
+                    if keep:
+                        new_lines.append(line)
+                
+                with open(conf_file, "w") as f:
+                    f.writelines(new_lines)
+            except:
+                pass
+    
+    def reset_to_defaults(self) -> int:
+        """
+        Reset all optimizations to system defaults
+        Returns count of parameters reset
+        """
+        console.print("[yellow]⚠️ Tüm optimizasyonlar varsayılana döndürülüyor...[/yellow]\n")
+        
+        # Default kernel values for common parameters
+        defaults = {
+            "vm.swappiness": "60",
+            "vm.dirty_ratio": "20",
+            "vm.dirty_background_ratio": "10",
+            "net.ipv4.tcp_congestion_control": "cubic",
+            "net.ipv4.tcp_fastopen": "1",
+            "net.core.rmem_max": "212992",
+            "net.core.wmem_max": "212992",
+            "kernel.sched_autogroup_enabled": "1",
+        }
+        
+        reset_count = 0
+        for param, default in defaults.items():
+            s, _, _ = run_command(f"sysctl -w {param}={default}", sudo=True)
+            if s:
+                console.print(f"  [green]✓[/] {param} = {default}")
+                reset_count += 1
+        
+        # Remove our config files
+        for conf_file in ["/etc/sysctl.d/99-fedoraclean-ai.conf", 
+                          "/etc/sysctl.d/99-fedoraclean-net.conf"]:
+            if os.path.exists(conf_file):
+                try:
+                    os.remove(conf_file)
+                    console.print(f"  [green]✓[/] {conf_file} silindi")
+                except:
+                    pass
+        
+        # Clear transaction history
+        self._save_transactions([])
+        
+        console.print(f"\n[green]✓ {reset_count} parametre varsayılana döndürüldü.[/green]")
+        return reset_count
     
 
 class AIOptimizationEngine:
@@ -700,15 +948,19 @@ class AIOptimizationEngine:
         if disk_type in ["nvme", "ssd"]:
             current_dirty = current_values.get("vm.dirty_ratio", "20")
             optimal_dirty = "5" if disk_type == "nvme" else "10"
-            if int(current_dirty) > int(optimal_dirty):
-                self.proposals.append(OptimizationProposal(
-                    param="vm.dirty_ratio",
-                    current=current_dirty,
-                    proposed=optimal_dirty,
-                    reason=self.REASONS["dirty_ratio"],
-                    category="memory",
-                    priority="recommended"
-                ))
+            # Safe integer comparison - avoid crash on N/A
+            try:
+                if current_dirty != "N/A" and int(current_dirty) > int(optimal_dirty):
+                    self.proposals.append(OptimizationProposal(
+                        param="vm.dirty_ratio",
+                        current=current_dirty,
+                        proposed=optimal_dirty,
+                        reason=self.REASONS["dirty_ratio"],
+                        category="memory",
+                        priority="recommended"
+                    ))
+            except ValueError:
+                pass  # Skip if value is not a valid integer
         
         # === SCHEDULER AUTOGROUP ===
         current_ag = current_values.get("kernel.sched_autogroup_enabled", "0")
@@ -735,16 +987,20 @@ class AIOptimizationEngine:
             ))
         
         # === ZRAM CHECK ===
+        # === ZRAM CHECK ===
         if not state["zram_active"]:
-            self.proposals.append(OptimizationProposal(
-                param="ZRAM",
-                current="disabled",
-                proposed="enabled",
-                reason=self.REASONS["zram_disabled"],
-                category="memory",
-                priority="optional",
-                command="dnf install -y zram-generator && systemctl enable --now zram-generator"
-            ))
+            # Check if zram-generator is installed or available
+            s, _, _ = run_command("rpm -q zram-generator || dnf info zram-generator >/dev/null 2>&1")
+            if s:
+                self.proposals.append(OptimizationProposal(
+                    param="ZRAM",
+                    current="disabled",
+                    proposed="enabled",
+                    reason=self.REASONS["zram_disabled"],
+                    category="memory",
+                    priority="optional",
+                    command="dnf install -y zram-generator && systemctl enable --now zram-generator"
+                ))
         
         return self.proposals
     
@@ -789,26 +1045,32 @@ class AIOptimizationEngine:
         
         # Buffer sizes (for high-bandwidth connections)
         rmem = current.get("net.core.rmem_max", "212992")
-        if int(rmem) < 16777216:
-            self.proposals.append(OptimizationProposal(
-                param="net.core.rmem_max",
-                current=rmem,
-                proposed="16777216",
-                reason="Büyük alım buffer'ı yüksek bant genişliğinde indirme hızını artırır. Özellikle 100+ Mbps bağlantılarda etkilidir.",
-                category="network",
-                priority="optional"
-            ))
+        try:
+            if rmem != "N/A" and int(rmem) < 16777216:
+                self.proposals.append(OptimizationProposal(
+                    param="net.core.rmem_max",
+                    current=rmem,
+                    proposed="16777216",
+                    reason="Büyük alım buffer'ı yüksek bant genişliğinde indirme hızını artırır. Özellikle 100+ Mbps bağlantılarda etkilidir.",
+                    category="network",
+                    priority="optional"
+                ))
+        except ValueError:
+            pass
         
         wmem = current.get("net.core.wmem_max", "212992")
-        if int(wmem) < 16777216:
-            self.proposals.append(OptimizationProposal(
-                param="net.core.wmem_max",
-                current=wmem,
-                proposed="16777216",
-                reason="Büyük gönderim buffer'ı yüksek bant genişliğinde yükleme hızını artırır.",
-                category="network",
-                priority="optional"
-            ))
+        try:
+            if wmem != "N/A" and int(wmem) < 16777216:
+                self.proposals.append(OptimizationProposal(
+                    param="net.core.wmem_max",
+                    current=wmem,
+                    proposed="16777216",
+                    reason="Büyük gönderim buffer'ı yüksek bant genişliğinde yükleme hızını artırır.",
+                    category="network",
+                    priority="optional"
+                ))
+        except ValueError:
+            pass
         
         # MTU Probing (for better throughput)
         mtu = current.get("net.ipv4.tcp_mtu_probing", "0")
@@ -848,9 +1110,9 @@ class AIOptimizationEngine:
                 
                 # Parse current scheduler (marked with [brackets])
                 current_sched = "unknown"
-                for s in sched_out.strip().split():
-                    if s.startswith('[') and s.endswith(']'):
-                        current_sched = s[1:-1]
+                for sched_item in sched_out.strip().split():
+                    if sched_item.startswith('[') and sched_item.endswith(']'):
+                        current_sched = sched_item[1:-1]
                         break
                 
                 # Determine optimal scheduler
@@ -930,9 +1192,10 @@ class AIOptimizationEngine:
             
             console.print()
     
-    def apply_proposals(self, backup_first: bool = True) -> List[str]:
+    def apply_proposals(self, backup_first: bool = True, category: str = "general") -> List[str]:
         """Apply approved proposals and return list of applied changes"""
         applied = []
+        changes_for_tx = []  # For transaction recording
         
         if backup_first:
             try:
@@ -949,6 +1212,11 @@ class AIOptimizationEngine:
                     s, _, err = run_command(p.command, sudo=True)
                     if s:
                         applied.append(f"{p.param}: {p.current} → {p.proposed}")
+                        changes_for_tx.append({
+                            "param": p.param,
+                            "old": p.current,
+                            "new": p.proposed
+                        })
                         console.print(f"[green]✓ {p.param} uygulandı[/green]")
                     else:
                         console.print(f"[red]✗ {p.param} hatası: {err}[/red]")
@@ -957,11 +1225,26 @@ class AIOptimizationEngine:
                     s, _, err = run_command(f"sysctl -w {p.param}={p.proposed}", sudo=True)
                     if s:
                         applied.append(f"{p.param}: {p.current} → {p.proposed}")
+                        changes_for_tx.append({
+                            "param": p.param,
+                            "old": p.current,
+                            "new": p.proposed
+                        })
                         console.print(f"[green]✓ {p.param} = {p.proposed}[/green]")
                     else:
                         console.print(f"[red]✗ {p.param} hatası: {err}[/red]")
             except Exception as e:
                 console.print(f"[red]Hata: {e}[/red]")
+        
+        # Record transaction for rollback
+        if changes_for_tx:
+            try:
+                tx_manager = TransactionManager()
+                description = f"{category.title()} Optimize - {len(changes_for_tx)} parametre"
+                tx_id = tx_manager.record_transaction(category, description, changes_for_tx)
+                console.print(f"[dim]📝 İşlem kaydedildi: {tx_id}[/dim]")
+            except:
+                pass
         
         # Persist sysctl changes
         if applied:

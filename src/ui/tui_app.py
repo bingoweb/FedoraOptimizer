@@ -26,7 +26,8 @@ from modules.optimizer import (
     SysctlOptimizer, 
     IOSchedulerOptimizer, 
     OptimizationBackup,
-    AIOptimizationEngine
+    AIOptimizationEngine,
+    TransactionManager
 )
 from modules.gaming import GamingOptimizer
 from modules.logger import log_info, log_exception, get_log_path
@@ -179,7 +180,7 @@ class OptimizerApp:
                 
                 # Ask for confirmation
                 if Confirm.ask("\n[bold yellow]Bu değişiklikleri uygulamak istiyor musunuz?[/bold yellow]"):
-                    applied = ai_engine.apply_proposals()
+                    applied = ai_engine.apply_proposals(category="quick")
                     console.print(f"\n[green]✓ {len(applied)} değişiklik uygulandı![/green]")
                 else:
                     console.print("\n[dim]İptal edildi. Değişiklik yapılmadı.[/dim]")
@@ -206,7 +207,7 @@ class OptimizerApp:
                 ai_engine.display_proposals()
                 
                 if Confirm.ask("\n[bold yellow]Bu zamanlayıcı değişikliklerini uygulamak istiyor musunuz?[/bold yellow]"):
-                    applied = ai_engine.apply_proposals()
+                    applied = ai_engine.apply_proposals(category="io")
                     console.print(f"\n[green]✓ {len(applied)} disk zamanlayıcısı optimize edildi![/green]")
                 else:
                     console.print("\n[dim]İptal edildi. Değişiklik yapılmadı.[/dim]")
@@ -227,7 +228,7 @@ class OptimizerApp:
                 ai_engine.display_proposals()
                 
                 if Confirm.ask("\n[bold yellow]Bu ağ optimizasyonlarını uygulamak istiyor musunuz?[/bold yellow]"):
-                    applied = ai_engine.apply_proposals()
+                    applied = ai_engine.apply_proposals(category="network")
                     console.print(f"\n[green]✓ {len(applied)} ağ parametresi optimize edildi![/green]")
                 else:
                     console.print("\n[dim]İptal edildi. Değişiklik yapılmadı.[/dim]")
@@ -255,7 +256,7 @@ class OptimizerApp:
                 
                 # Ask for confirmation
                 if Confirm.ask("\n[bold yellow]Bu kernel parametrelerini uygulamak istiyor musunuz?[/bold yellow]"):
-                    applied = ai_engine.apply_proposals()
+                    applied = ai_engine.apply_proposals(category="kernel")
                     console.print(f"\n[green]✓ {len(applied)} kernel parametresi optimize edildi![/green]")
                     console.print("[dim]Değişiklikler kalıcı olarak /etc/sysctl.d/ altına kaydedildi.[/dim]")
                 else:
@@ -264,22 +265,73 @@ class OptimizerApp:
         
         elif key == '8':
             def rollback():
-                backup = OptimizationBackup()
-                snapshots = backup.list_snapshots()
-                if not snapshots:
-                    console.print("[yellow]Henüz yedek yok.[/yellow]")
-                    return
-                console.print("[bold]Mevcut Yedekler:[/bold]\n")
-                for i, s in enumerate(snapshots, 1):
-                    console.print(f"  {i}. {s['name']} ({s['created']})")
-                choice = Prompt.ask("\nGeri yüklenecek yedek numarası", default="1")
-                try:
-                    idx = int(choice) - 1
-                    if 0 <= idx < len(snapshots):
-                        if Confirm.ask(f"'{snapshots[idx]['name']}' geri yüklensin mi?"):
-                            backup.restore_snapshot(snapshots[idx]['name'])
-                except:
-                    console.print("[red]Geçersiz seçim.[/red]")
+                console.print("[bold cyan]↩️ GERİ AL MERKEZİ[/bold cyan]\n")
+                
+                tx_manager = TransactionManager()
+                last_tx = tx_manager.get_last_transaction()
+                
+                # Menu options
+                console.print("[bold]Seçenekler:[/bold]\n")
+                
+                if last_tx:
+                    elapsed = ""
+                    try:
+                        from datetime import datetime
+                        tx_time = datetime.fromisoformat(last_tx['timestamp'])
+                        diff = datetime.now() - tx_time
+                        if diff.seconds < 3600:
+                            elapsed = f"{diff.seconds // 60} dk önce"
+                        else:
+                            elapsed = f"{diff.seconds // 3600} saat önce"
+                    except:
+                        elapsed = last_tx['timestamp'][:16]
+                    
+                    console.print(f"  [bold cyan]1.[/] SON İŞLEMİ GERİ AL")
+                    console.print(f"     [dim]└─ {last_tx['description']} ({elapsed})[/dim]\n")
+                else:
+                    console.print(f"  [dim]1. Son işlem yok[/dim]\n")
+                
+                console.print(f"  [bold cyan]2.[/] İŞLEM GEÇMİŞİ")
+                console.print(f"     [dim]└─ Tüm kayıtlı işlemleri gör[/dim]\n")
+                
+                console.print(f"  [bold cyan]3.[/] VARSAYILANLARA DÖN")
+                console.print(f"     [dim]└─ Tüm optimizasyonları sıfırla[/dim]\n")
+                
+                console.print(f"  [dim]0. Geri[/dim]\n")
+                
+                choice = Prompt.ask("Seçiminiz", default="0")
+                
+                if choice == "1" and last_tx:
+                    if Confirm.ask(f"'{last_tx['description']}' geri alınsın mı?"):
+                        tx_manager.undo_last()
+                
+                elif choice == "2":
+                    transactions = tx_manager.list_transactions(limit=10)
+                    if not transactions:
+                        console.print("\n[yellow]Henüz işlem geçmişi yok.[/yellow]")
+                        return
+                    
+                    console.print("\n[bold]İşlem Geçmişi:[/bold]\n")
+                    for i, tx in enumerate(transactions, 1):
+                        console.print(f"  {i}. [{tx['id']}] {tx['description']}")
+                        console.print(f"     [dim]{tx['timestamp'][:16]} - {len(tx['changes'])} değişiklik[/dim]")
+                    
+                    sel = Prompt.ask("\nGeri alınacak işlem numarası (0=iptal)", default="0")
+                    try:
+                        idx = int(sel) - 1
+                        if 0 <= idx < len(transactions):
+                            tx = transactions[idx]
+                            if Confirm.ask(f"'{tx['description']}' geri alınsın mı?"):
+                                tx_manager.undo_by_id(tx['id'])
+                    except:
+                        pass
+                
+                elif choice == "3":
+                    console.print("\n[bold red]⚠️ UYARI:[/bold red] Tüm optimizasyonlar varsayılana dönecek!")
+                    console.print("[dim]Bu işlem geri alınamaz.[/dim]\n")
+                    if Confirm.ask("Devam etmek istiyor musunuz?"):
+                        tx_manager.reset_to_defaults()
+            
             self.pause_and_run(live, rollback)
 
     def run(self):
