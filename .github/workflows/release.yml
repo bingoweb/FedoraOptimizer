@@ -14,10 +14,36 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+        with:
+          fetch-depth: 0
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # Find the previous tag (exclude current if it points to HEAD)
+          THIS_TAG=${{ github.ref_name }}
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          echo "Generating log from $PREV_TAG to $THIS_TAG"
+          
+          if [ -z "$PREV_TAG" ]; then
+            # Initial release: all history
+            LOG=$(git log --pretty=format:"### %s%n%b%n" --no-merges)
+          else
+            # Incremental release
+            LOG=$(git log --pretty=format:"### %s%n%b%n" --no-merges ${PREV_TAG}..HEAD)
+          fi
+          
+          # Write to output safely using delimiter
+          {
+            echo "body<<EOF"
+            echo "$LOG"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body: ${{ steps.changelog.outputs.body }}
           make_latest: true
           token: ${{ secrets.GITHUB_TOKEN }}
