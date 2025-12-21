@@ -88,6 +88,20 @@ sudo ./run.sh
 - Python 3.12+
 - Root privileges
 
+
+## ⚠️ Compatibility & Limitations
+
+### Supported Systems
+- **OS**: Fedora Workstation 40, 41, 42, 43 (Rawhide)
+- **Desktop Environments**: GNOME 45+, KDE Plasma 6+
+- **Architecture**: x86_64, aarch64 (ARM)
+
+### Known Limitations
+- **Immutable Variants (Silverblue/Kinoite)**: Fully supported, but some persistence methods differ due to read-only root.
+- **Virtual Machines**: Deep hardware optimization is limited (CPUs often passed as "Common KVM processor").
+- **NVIDIA Proprietary**: Some advanced power management features may be overridden by the driver.
+- **Root Requirement**: This tool modifies system configurations and requires `sudo`.
+
 ---
 
 ## 🎯 Usage
