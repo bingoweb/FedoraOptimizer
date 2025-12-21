@@ -244,7 +244,8 @@ fedoraclean/
 
 ## 🔄 Changelog
 
-### v0.2.1 (December 2025) - Current
+### v0.2.2 (December 2025) - Production
+- 👷 **CI/CD**: Automated GitHub Releases (Stable)
 - 🚀 **2025 Kernel Tech**: BBRv3 detection, PSI metrics, sched_ext support
 - ✨ AI-Driven Optimization Workflow
 - ↩️ Transaction-Based Rollback System
