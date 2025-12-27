@@ -39,7 +39,7 @@ class IOSchedulerOptimizer:
     def __init__(self, hw_detector: HardwareDetector):
         self.hw = hw_detector
 
-    def detect_block_devices(self) -> list:
+    def detect_block_devices(self) -> List[Dict[str, str]]:
         """Get list of block devices with their types"""
         devices = []
         s, out, _ = run_command("lsblk -d -o NAME,TYPE,TRAN,ROTA -n")
@@ -91,10 +91,10 @@ class IOSchedulerOptimizer:
         """Apply I/O scheduler to a device"""
         sched_path = f"/sys/block/{device}/queue/scheduler"
         try:
-            with open(sched_path, "w") as f:
+            with open(sched_path, "w", encoding="utf-8") as f:
                 f.write(scheduler)
             return True
-        except Exception as e:
+        except (OSError, PermissionError) as e:
             console.print(f"[red]Scheduler değiştirilemedi ({device}): {e}[/red]")
             return False
 
@@ -103,13 +103,13 @@ class IOSchedulerOptimizer:
         ra_path = f"/sys/block/{device}/queue/read_ahead_kb"
         ra_value = self.READ_AHEAD.get(category, 256)
         try:
-            with open(ra_path, "w") as f:
+            with open(ra_path, "w", encoding="utf-8") as f:
                 f.write(str(ra_value))
             return True
-        except Exception:
+        except (OSError, PermissionError):
             return False
 
-    def optimize_all_devices(self, workload: str = "desktop") -> list:
+    def optimize_all_devices(self, workload: str = "desktop") -> List[Dict[str, str]]:
         """Optimize all detected block devices"""
         results = []
         devices = self.detect_block_devices()

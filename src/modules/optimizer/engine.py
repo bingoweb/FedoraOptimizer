@@ -132,6 +132,7 @@ class AIOptimizationEngine:
         return self.proposals
 
     def _analyze_swappiness(self, current_values, disk_type):
+        """Analyze swappiness parameter based on disk type and propose optimal value."""
         current_swp = current_values.get("vm.swappiness", "60")
         if disk_type == "nvme":
             optimal = "5"
@@ -154,6 +155,7 @@ class AIOptimizationEngine:
             ))
 
     def _analyze_network_basics(self, current_values):
+        """Analyze network parameters (BBR, TCP FastOpen) and propose improvements."""
         current_cc = current_values.get("net.ipv4.tcp_congestion_control", "cubic")
         if "bbr" not in current_cc.lower():
             self.proposals.append(OptimizationProposal(
@@ -173,6 +175,7 @@ class AIOptimizationEngine:
             ))
 
     def _analyze_dirty_ratio(self, current_values, disk_type):
+        """Analyze vm.dirty_ratio parameter for SSD/NVMe optimization."""
         current_dirty = current_values.get("vm.dirty_ratio", "20")
         optimal_dirty = "5" if disk_type == "nvme" else "10"
         try:
@@ -187,6 +190,7 @@ class AIOptimizationEngine:
             pass
 
     def _analyze_storage_features(self, state, disk_type):
+        """Analyze storage features like TRIM and ZRAM and propose enablement if missing."""
         if disk_type in ["nvme", "ssd"] and not state["trim_active"]:
             self.proposals.append(OptimizationProposal(
                 param="fstrim.timer",
@@ -209,6 +213,7 @@ class AIOptimizationEngine:
                 ))
 
     def _analyze_gamer_profile(self, current_values):
+        """Analyze and propose gamer-specific optimizations (vm.max_map_count, scheduler)."""
         curr_map = current_values.get("vm.max_map_count", "65530")
         if curr_map.isdigit() and int(curr_map) < 1000000:
             self.proposals.append(OptimizationProposal(
@@ -228,6 +233,7 @@ class AIOptimizationEngine:
             ))
 
     def _analyze_dev_profile(self, current_values):
+        """Analyze and propose developer-specific optimizations (inotify watches)."""
         curr_watch = current_values.get("fs.inotify.max_user_watches", "8192")
         if curr_watch.isdigit() and int(curr_watch) < 524288:
             self.proposals.append(OptimizationProposal(
@@ -238,6 +244,7 @@ class AIOptimizationEngine:
             ))
 
     def _analyze_hardware_specifics(self, state, current_values):
+        """Analyze hardware-specific optimizations (laptop power, Intel hybrid, GPU)."""
         # Laptop
         if state["chassis"] in ["notebook", "laptop"]:
             curr_wb = current_values.get("vm.dirty_writeback_centisecs", "500")
@@ -259,6 +266,51 @@ class AIOptimizationEngine:
                     reason="[INTEL HYBRID] Thread Director (ITMT) aktivasyonu.",
                     category="cpu", priority="critical"
                 ))
+
+        # Intel GPU (GuC/HuC)
+        if "Intel" in self.hw.gpu_info:
+            try:
+                with open("/proc/cmdline", "r", encoding='utf-8') as f:
+                    cmdline = f.read()
+                if "i915.enable_guc" not in cmdline:
+                    self.proposals.append(OptimizationProposal(
+                        param="i915.enable_guc",
+                        current="disabled", proposed="2",
+                        reason="[INTEL GPU] Iris Xe performans için GuC/HuC Firmware.",
+                        category="gpu", priority="recommended",
+        
+        # Additional network checks - buffer sizes
+        current_rmem = current_values.get("net.core.rmem_max", "0")
+        if current_rmem != "N/A":
+            try:
+                if int(current_rmem) < 16777216:
+                    self.proposals.append(OptimizationProposal(
+                        param="net.core.rmem_max",
+                        current=current_rmem,
+                        proposed="16777216",
+                        reason="Ağ alım buffer'ını 16MB'a yükseltir, yüksek bant genişliği için kritik",
+                        category="network",
+                        priority="recommended"
+                    ))
+            except ValueError:
+                pass
+        
+        current_wmem = current_values.get("net.core.wmem_max", "0")
+        if current_wmem != "N/A":
+            try:
+                if int(current_wmem) < 16777216:
+                    self.proposals.append(OptimizationProposal(
+                        param="net.core.wmem_max",
+                        current=current_wmem,
+                        proposed="16777216",
+                        reason="Ağ gönderim buffer'ını 16MB'a yükseltir, upload performansı için önemli",
+                        category="network",
+                        priority="recommended"
+                    ))
+            except ValueError:
+                pass
+        
+        return self.proposals
 
     def display_proposals(self) -> None:
         """Display proposals in a formatted table with explanations"""
@@ -338,7 +390,7 @@ class AIOptimizationEngine:
         return applied
 
     def _persist_sysctl_changes(self):
-        conf_file = "/etc/sysctl.d/99-fedoraclean-ai.conf"
+        conf_file = "/etc/sysctl.d/99-fedoraclean.conf"
         lines = []
         for p in self.proposals:
             if not p.command:
@@ -347,7 +399,8 @@ class AIOptimizationEngine:
 
         if lines:
             try:
+                # Append to the main config file
                 with open(conf_file, "a", encoding='utf-8') as f:
-                    f.write("\n# AI Opt\n" + "\n".join(lines) + "\n")
+                    f.write("\n" + "\n".join(lines) + "\n")
             except Exception:
                 pass

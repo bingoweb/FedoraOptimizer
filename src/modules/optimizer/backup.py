@@ -46,11 +46,11 @@ class OptimizationBackup:
         # Save current sysctl values
         s, out, _ = run_command("sysctl -a 2>/dev/null")
         if s:
-            with open(os.path.join(snapshot_dir, "sysctl_dump.txt"), "w") as f:
+            with open(os.path.join(snapshot_dir, "sysctl_dump.txt"), "w", encoding="utf-8") as f:
                 f.write(out)
 
         # Save metadata
-        with open(os.path.join(snapshot_dir, "metadata.txt"), "w") as f:
+        with open(os.path.join(snapshot_dir, "metadata.txt"), "w", encoding="utf-8") as f:
             f.write(f"Created: {datetime.now().isoformat()}\n")
             f.write(f"Kernel: {platform.release()}\n")
 
@@ -66,7 +66,7 @@ class OptimizationBackup:
                     meta_file = os.path.join(path, "metadata.txt")
                     created = "Unknown"
                     if os.path.exists(meta_file):
-                        with open(meta_file, "r") as f:
+                        with open(meta_file, "r", encoding="utf-8") as f:
                             for line in f:
                                 if line.startswith("Created:"):
                                     created = line.split(":", 1)[1].strip()

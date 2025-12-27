@@ -28,19 +28,19 @@ class TransactionManager:
 
     def _ensure_file(self):
         if not os.path.exists(self.TRANSACTION_FILE):
-            with open(self.TRANSACTION_FILE, "w") as f:
+            with open(self.TRANSACTION_FILE, "w", encoding="utf-8") as f:
                 json.dump([], f)
 
     def _load_transactions(self) -> List[Dict]:
         try:
-            with open(self.TRANSACTION_FILE, "r") as f:
+            with open(self.TRANSACTION_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return []
 
     def _save_transactions(self, transactions: List[Dict]):
         try:
-            with open(self.TRANSACTION_FILE, "w") as f:
+            with open(self.TRANSACTION_FILE, "w", encoding="utf-8") as f:
                 json.dump(transactions, f, indent=2, ensure_ascii=False)
         except Exception as e:
             console.print(f"[red]Transaction kayıt hatası: {e}[/red]")
@@ -184,7 +184,7 @@ class TransactionManager:
                 continue
 
             try:
-                with open(conf_file, "r") as f:
+                with open(conf_file, "r", encoding="utf-8") as f:
                     lines = f.readlines()
 
                 # Filter out lines containing removed parameters
@@ -198,7 +198,73 @@ class TransactionManager:
                     if keep:
                         new_lines.append(line)
 
-                with open(conf_file, "w") as f:
+                with open(conf_file, "w", encoding="utf-8") as f:
                     f.writelines(new_lines)
             except Exception:
                 pass
+
+    def reset_to_defaults(self) -> bool:
+        """
+        Reset all system optimizations to default state.
+        
+        This will:
+        1. Undo all recorded transactions in reverse order
+        2. Remove all FedoraClean configuration files
+        3. Run sysctl --system to reload defaults
+        
+        Returns:
+            bool: True if successful
+        """
+        console.print("\n[bold yellow]🔄 Tüm optimizasyonlar varsayılana döndürülüyor...[/bold yellow]\n")
+        
+        # Load all transactions
+        transactions = self._load_transactions()
+        
+        if not transactions:
+            console.print("[yellow]Geri alınacak işlem bulunamadı.[/yellow]")
+        else:
+            console.print(f"[dim]{len(transactions)} işlem bulundu, geri alınıyor...[/dim]\n")
+            
+            # Undo all transactions in reverse order (newest first)
+            for i, tx in enumerate(reversed(transactions), 1):
+                console.print(f"[dim]{i}/{len(transactions)} - {tx['description']}[/dim]")
+                
+                # Undo each change in the transaction
+                for change in tx["changes"]:
+                    param = change["param"]
+                    old_value = change["old"]
+                    
+                    # Only undo sysctl parameters
+                    if "." in param and not param.startswith("/"):
+                        success, _, _ = run_command(f"sysctl -w {param}={old_value}", sudo=True)
+                        if success:
+                            console.print(f"  [green]✓[/] {param} = {old_value}")
+        
+        # Clear transaction history
+        console.print("\n[dim]İşlem geçmişi temizleniyor...[/dim]")
+        self._save_transactions([])
+        
+        # Remove config files
+        config_files = [
+            "/etc/sysctl.d/99-fedoraclean.conf",
+            "/etc/sysctl.d/99-fedoraclean-ai.conf",
+            "/etc/sysctl.d/99-fedoraclean-net.conf"
+        ]
+        
+        console.print("\n[dim]Konfigürasyon dosyaları temizleniyor...[/dim]")
+        for config_file in config_files:
+            if os.path.exists(config_file):
+                try:
+                    os.remove(config_file)
+                    console.print(f"[green]✓ Silindi:[/] {config_file}")
+                except Exception as e:
+                    console.print(f"[red]✗ Silinemedi ({config_file}):[/] {e}")
+        
+        # Reload system defaults
+        console.print("\n[dim]Sistem varsayılanları yükleniyor...[/dim]")
+        run_command("sysctl --system", sudo=True)
+        
+        console.print("\n[bold green]✅ Tüm optimizasyonlar başarıyla varsayılana döndürüldü![/bold green]")
+        console.print("[dim]Sistem orijinal haline geldi.[/dim]\n")
+        
+        return True

@@ -80,10 +80,9 @@ class SysctlOptimizer:
 
     def __init__(self, hw_detector: HardwareDetector):
         self.hw = hw_detector
-        self.conf_file = "/etc/sysctl.d/99-fedoraclean-ai.conf"
+        self.conf_file = "/etc/sysctl.d/99-fedoraclean.conf"
 
-    def _detect_disk_type(self) -> str:
-        return self.hw.get_simple_disk_type()
+
 
     def calculate_min_free_kbytes(self) -> int:
         """Calculate optimal min_free_kbytes based on RAM size"""
@@ -98,7 +97,7 @@ class SysctlOptimizer:
 
     def generate_optimized_config(self, persona: str = "general") -> dict:
         """Generate optimized sysctl parameters based on detected hardware - UNIVERSAL"""
-        disk_type = self._detect_disk_type()
+        disk_type = self.hw.get_simple_disk_type()
         chassis = self.hw.chassis.lower()
         tweaks = {}
 
@@ -173,7 +172,7 @@ class SysctlOptimizer:
         current_conf = ""
         if os.path.exists(self.conf_file):
             try:
-                with open(self.conf_file, "r") as f:
+                with open(self.conf_file, "r", encoding="utf-8") as f:
                     current_conf = f.read()
             except Exception:
                 pass
@@ -187,7 +186,7 @@ class SysctlOptimizer:
 
         if new_lines:
             try:
-                with open(self.conf_file, "a") as f:
+                with open(self.conf_file, "a", encoding="utf-8") as f:
                     f.write("\n# FedoraClean AI Generated - " +
                            datetime.now().strftime("%Y-%m-%d %H:%M") + "\n")
                     f.write("\n".join(new_lines) + "\n")

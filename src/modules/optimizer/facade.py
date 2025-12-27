@@ -169,379 +169,8 @@ class FedoraOptimizer:
             else:
                 console.print("[dim]İşlem iptal edildi.[/dim]")
 
-    def optimize_network(self):
-        """Apply network stack optimizations"""
-        console.print("[yellow]Ağ Yığını (TCP/IP) Optimize Ediliyor...[/yellow]")
-        tweaks = {
-            "net.ipv4.tcp_fastopen": "3",
-            "net.core.default_qdisc": "fq_codel",
-            "net.ipv4.tcp_congestion_control": "bbr"
-        }
-        conf_file = "/etc/sysctl.d/99-fedoraclean-net.conf"
-        current_conf = ""
-        if os.path.exists(conf_file):
-            with open(conf_file, 'r', encoding='utf-8') as f:
-                current_conf = f.read()
-
-        new_lines = []
-        for key, val in tweaks.items():
-            if f"{key} = {val}" not in current_conf:
-                new_lines.append(f"{key} = {val}")
-
-        if new_lines:
-            try:
-                with open(conf_file, "a", encoding='utf-8') as f:
-                    f.write("\n".join(new_lines) + "\n")
-                run_command("sysctl --system", sudo=True)
-                console.print(Panel(
-                    "\n".join(new_lines),
-                    title="sysctl Ayarları Eklendi",
-                    border_style=Theme.SUCCESS
-                ))
-            except Exception as e:
-                console.print(f"[red]Yazma hatası: {e}[/red]")
-        else:
-            console.print("[green]✓ Ağ yığını zaten optimize durumda.[/green]")
-
-    def trim_ssd(self):
-        """Perform SSD TRIM if applicable"""
-        if "SSD" not in self.hw.disk_info and "NVMe" not in self.hw.disk_info:
-            console.print(
-                "[yellow]⚠ Sistemde SSD algılanmadı (veya HDD kullanılıyor). "
-                "TRIM HDD için uygun değil.[/yellow]"
-            )
-            return
-
-        console.print("[yellow]SSD Durumu Kontrol Ediliyor...[/yellow]")
-        _, s_out, _ = run_command("systemctl is-enabled fstrim.timer")
-        if "enabled" not in s_out:
-            run_command("systemctl enable --now fstrim.timer", sudo=True)
-            console.print("[green]✓ Otomatik TRIM aktif edildi.[/green]")
-        else:
-            console.print("[dim cyan]• Otomatik SSD TRIM (fstrim.timer) zaten aktif.[/]")
-
-        console.print(" > Manuel TRIM çalıştırılıyor...")
-        run_command("fstrim -av", sudo=True)
-        console.print("[green]✓ TRIM tamamlandı.[/green]")
-
-    def optimize_btrfs(self):
-        """Optimize Btrfs mount options"""
-        console.print("[yellow]Btrfs Bağlama Seçenekleri Kontrol Ediliyor...[/yellow]")
-        fstab = "/etc/fstab"
-
-        if not os.path.exists(fstab):
-            return
-
-        # Check against string description logic from HardwareDetector
-        if "HDD" in self.hw.disk_info:
-            console.print(
-                "[yellow]ℹ HDD kullanıyorsunuz. 'noatime' yine de faydalı "
-                "olabilir ancak SSD kadar kritik değil.[/yellow]"
-            )
-        try:
-            with open(fstab, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
-        except Exception:
-            return
-
-        new_lines = []
-        changed = False
-        for line in lines:
-            if "btrfs" in line and "relatime" in line:
-                new_lines.append(line.replace("relatime", "noatime"))
-                changed = True
-            else:
-                new_lines.append(line)
-
-        if changed:
-            if Confirm.ask(
-                "[bold]Disk performansını artırmak için 'noatime' ayarı uygulansın mı?[/bold]"
-            ):
-                with open(fstab, 'w', encoding='utf-8') as f:
-                    f.writelines(new_lines)
-                console.print("[green]✓ /etc/fstab güncellendi.[/green]")
-        else:
-            console.print("[green]✓ Btrfs zaten 'noatime' (veya özel ayar) kullanıyor.[/green]")
-
-    def calculate_smart_score(self):
-        """Calculate base optimization score"""
-        score = 0
-        report = []
-
-        # 1. DNF (Universal)
-        try:
-            with open("/etc/dnf/dnf5.conf", "r", encoding='utf-8') as f:
-                c = f.read()
-            if "max_parallel_downloads=10" in c:
-                score += 15
-                report.append(
-                    ("[green]MÜKEMMEL[/]", "Paket Yöneticisi",
-                     "DNF5 Tam Güçte (Paralel İndirme x10).")
-                )
-            else:
-                report.append(
-                    ("[yellow]GELİŞTİRİLMELİ[/]", "Paket Yöneticisi",
-                     "DNF5 limitli. Hızlandırma önerilir.")
-                )
-        except Exception:
-            pass
-
-        # 2. Boot Service
-        _, out, _ = run_command("systemctl is-enabled NetworkManager-wait-online.service")
-        if "disabled" in out:
-            score += 15
-            report.append(("[green]HIZLI[/]", "Boot Süresi", "Ağ bekleme servisi kapalı."))
-        else:
-            report.append(
-                ("[red]YAVAŞ[/]", "Boot Süresi",
-                 "Boot sırasında ağ bekleniyor (Gecikme yaratır).")
-            )
-
-        # 3. Disk Strategy
-        if "NVMe" in self.hw.disk_info:
-            # Check TRIM
-            _, out_t, _ = run_command("systemctl is-enabled fstrim.timer")
-            if "enabled" in out_t:
-                score += 20
-                report.append(
-                    ("[green]KORUNUYOR[/]", "NVMe Sağlığı",
-                     "NVMe SSD için otomatik TRIM aktif.")
-                )
-            else:
-                report.append(
-                    ("[red]RİSKLİ[/]", "NVMe Sağlığı",
-                     "Yüksek performanslı NVMe için TRIM şart!")
-                )
-        elif "SSD" in self.hw.disk_info:
-            _, out_t, _ = run_command("systemctl is-enabled fstrim.timer")
-            if "enabled" in out_t:
-                score += 20
-                report.append(
-                    ("[green]KORUNUYOR[/]", "SSD Sağlığı",
-                     "Otomatik TRIM aktif.")
-                )
-            else:
-                report.append(
-                    ("[red]RİSKLİ[/]", "SSD Sağlığı",
-                     "SSD ömrü için TRIM açılmalı.")
-                )
-        else:
-            score += 20
-            report.append(("[blue]SABİT[/]", "Disk", "Mekanik disk için standart yapılandırma."))
-
-        # 4. Network
-        if os.path.exists("/etc/sysctl.d/99-fedoraclean-net.conf"):
-            score += 15
-            report.append(
-                ("[green]MODERN[/]", "Ağ Protokolü", "TCP BBR ve Fast Open aktif.")
-            )
-        else:
-            report.append(
-                ("[yellow]ESKİ[/]", "Ağ Protokolü",
-                 "Geleneksel TCP Cubic. BBR ile hızlanabilir.")
-            )
-
-        # 5. RAM / ZRAM Strategy
-        ram_gb = self.hw.ram_info['total']
-        _, zram_out, _ = run_command("zramctl")
-
-        if "zram" in zram_out:
-            score += 20
-            msg = f"{ram_gb} GB RAM ile ZRAM sıkıştırma devrede."
-            if ram_gb < 16:
-                msg += " (Düşük RAM için hayati)."
-            report.append(("[green]VERİMLİ[/]", "Bellek Yönetimi", msg))
-        else:
-            if ram_gb < 16:
-                report.append(
-                    ("[red]KRİTİK[/]", "Bellek Yönetimi",
-                     f"{ram_gb} GB RAM var ama ZRAM kapalı! Performans düşer.")
-                )
-            else:
-                score += 15
-                report.append(
-                    ("[yellow]PASİF[/]", "Bellek Yönetimi",
-                     "ZRAM kapalı (Yüksek RAM var, acil değil).")
-                )
-
-        # 6. Performance Profile
-        if self.hw.chassis == "Laptop":
-            _, p_out, _ = run_command("powerprofilesctl get")
-            if "performance" in p_out or "balanced" in p_out:
-                score += 15
-                report.append(
-                    ("[green]DENGELİ[/]", "Güç Yönetimi",
-                     f"Laptop modu: {p_out.strip()}")
-                )
-            else:
-                report.append(
-                    ("[yellow]TASARRUF[/]", "Güç Yönetimi",
-                     "Güç tasarrufu modunda. Performans düşebilir.")
-                )
-        else:
-            score += 15
-            report.append(("[green]MAKSİMUM[/]", "Güç Yönetimi", "Masaüstü güç profili."))
-
-        return min(100, score), report
-
-    def _get_pressure_stall(self, resource="cpu"):
-        try:
-            with open(f"/proc/pressure/{resource}", "r", encoding='utf-8') as f:
-                content = f.read()
-                match = re.search(r"avg10=(\d+\.\d+)", content)
-                if match:
-                    return float(match.group(1))
-        except Exception:
-            pass
-        return 0.0
-
-    def analyze_usage_persona(self):
-        """Analyze system usage to determine user persona"""
-        persona = "Genel Kullanıcı"
-        confidence = 0
-
-        _, out, _ = run_command("ps -eo comm")
-        procs = out.lower()
-
-        if "steam" in procs or "lutris" in procs or "heroic" in procs:
-            persona = "Oyuncu (Gamer)"
-            confidence += 30
-
-        if "code" in procs or "pycharm" in procs or "node" in procs or "docker" in procs:
-            if persona == "Oyuncu (Gamer)":
-                persona = "Hibrit (Oyun & Dev)"
-            else:
-                persona = "Geliştirici (Dev)"
-            confidence += 30
-
-        if "NVIDIA" in self.hw.gpu_info or "AMD" in self.hw.gpu_info:
-            if "Intel" not in self.hw.gpu_info:
-                confidence += 20
-
-        if self.hw.ram_info['total'] > 30:
-            confidence += 10
-
-        return persona, confidence
-
-    def optimize_ai_heuristic(self):
-        """Execute legacy AI optimization logic"""
-        console.print("[bold magenta]🤖 YZ Karar Motoru (AI Engine) Çalışıyor...[/bold magenta]")
-
-        psi_cpu = self._get_pressure_stall("cpu")
-        psi_io = self._get_pressure_stall("io")
-        psi_mem = self._get_pressure_stall("memory")
-        persona, conf = self.analyze_usage_persona()
-
-        console.print(Panel(
-            f"👤 [bold cyan]Tespit Edilen Persona:[/] {persona} (Güven: %{conf})\n"
-            f"📊 [bold cyan]Sistem Stresi (PSI):[/] "
-            f"CPU: {psi_cpu:.2f} | IO: {psi_io:.2f} | MEM: {psi_mem:.2f}",
-            title="AI Durum Analizi", border_style="magenta"
-        ))
-
-        tweaks = {}
-        tweaks["vm.compaction_proactiveness"] = "20"
-
-        if "Oyuncu" in persona or "Geliştirici" in persona:
-            tweaks["vm.compaction_proactiveness"] = "50"
-            tweaks["vm.page_lock_unfairness"] = "1"
-
-        if psi_mem > 5.0:
-            tweaks["vm.swappiness"] = "60"
-        else:
-            tweaks["vm.swappiness"] = "10"
-
-        tweaks["vm.vfs_cache_pressure"] = "50"
-        tweaks["net.core.rmem_max"] = "16777216"
-        tweaks["net.core.wmem_max"] = "16777216"
-
-        console.print("[yellow]🧠 Algoritma Kararları Uygulanıyor (Kernel Sysctl)...[/yellow]")
-        conf_file = "/etc/sysctl.d/99-fedoraclean-ai.conf"
-
-        current_conf = ""
-        if os.path.exists(conf_file):
-            with open(conf_file, "r", encoding='utf-8') as f:
-                current_conf = f.read()
-
-        new_lines = []
-        for k, v in tweaks.items():
-            if f"{k} = {v}" not in current_conf:
-                new_lines.append(f"{k} = {v}")
-
-        if new_lines:
-            try:
-                with open(conf_file, "a", encoding='utf-8') as f:
-                    f.write("\n".join(new_lines) + "\n")
-                run_command("sysctl --system", sudo=True)
-                for line in new_lines:
-                    console.print(f"  [green]✓[/] {line} [dim](Persona: {persona})[/dim]")
-            except Exception as e:
-                console.print(f"[red]Hata: {e}[/red]")
-        else:
-            console.print("[green]✓ AI Kernel Ayarları zaten ideal durumda.[/green]")
-
-        if "Intel" in self.hw.cpu_info['model']:
-            self.optimize_intel_pstate_ai(persona)
-
-    def optimize_intel_pstate_ai(self, persona):
-        """Tune INTEL P-State EPP settings based on persona"""
-        console.print("[yellow]⚡ CPU Enerji Politikası (EPP) Denetleniyor...[/yellow]")
-
-        target_epp = "balance_performance"
-        if "Oyuncu" in persona or "Dev" in persona:
-            if self.hw.chassis == "Desktop":
-                target_epp = "performance"
-
-        _, out, _ = run_command("tuned-adm active")
-        current_profile = out.strip().split(": ")[-1]
-
-        target_profile = "balanced"
-        if target_epp == "performance":
-            target_profile = "throughput-performance"
-
-        if target_profile not in current_profile:
-            console.print(
-                f"  [cyan]ℹ Hedef Profil: {target_profile} (Mevcut: {current_profile})[/]"
-            )
-            if Confirm.ask(
-                f"[bold]AI, '{target_profile}' güç profilini öneriyor. Geçiş yapılsın mı?[/bold]"
-            ):
-                run_command(f"tuned-adm profile {target_profile}", sudo=True)
-                console.print(f"[green]✓ Tuned profili güncellendi: {target_profile}[/green]")
-        else:
-            console.print(
-                f"  [green]✓ CPU Güç Profili ({current_profile}) kullanıma uygun.[/green]"
-            )
-
-    def optimize_intel_gpu(self):
-        """Optimize Intel GPU settings (GuC/HuC)"""
-        if "Intel" not in self.hw.gpu_info:
-            console.print("[dim]• Intel GPU algılanmadı. Atlanıyor.[/dim]")
-            return
-
-        console.print("[yellow]Intel Iris Xe (GuC/HuC) Bellenimi Kontrol Ediliyor...[/yellow]")
-
-        try:
-            with open("/proc/cmdline", "r", encoding='utf-8') as f:
-                cmdline = f.read()
-            if "i915.enable_guc" in cmdline:
-                console.print("[green]✓ Intel GuC/HuC parametresi zaten ekli.[/green]")
-                return
-        except Exception:
-            return
-
-        if Confirm.ask(
-            "[bold]Intel GPU performansını artırmak için GuC/HuC Firmware "
-            "aktif edilsin mi? (GRUB güncellenir)[/bold]"
-        ):
-            cmd = "grubby --update-kernel=ALL --args='i915.enable_guc=2'"
-            s, _, err = run_command(cmd, sudo=True)
-            if s:
-                console.print(
-                    "[green]✓ GRUB güncellendi. Yeniden başlatma sonrası aktif olur.[/green]"
-                )
-            else:
-                console.print(f"[red]⚠ Hata: {err}[/red]")
+    # Legacy methods optimize_network and optimize_ai_heuristic removed.
+    # Logic is now handled by SysctlOptimizer and AIOptimizationEngine.
 
     def optimize_full_auto(self):
         """Enhanced full auto optimization using 2025 AI engines"""
@@ -591,25 +220,48 @@ class FedoraOptimizer:
         except Exception as e:
             console.print(f"[red]I/O Scheduler hatası: {e}[/red]")
 
-        self.optimize_ai_heuristic()
-
-        console.print("\n[bold cyan]⚙️ Temel Optimizasyonlar...[/bold cyan]")
-        self.apply_dnf5_optimizations()
         self.optimize_boot_profile()
         self.trim_ssd()
         self.optimize_btrfs()
-        self.optimize_intel_gpu()
 
         console.print(Panel(
             "[bold green]🎉 SİSTEM 2025 YZ MOTORİYLE OPTİMİZE EDİLDİ![/bold green]\n\n"
             "✅ 30+ kernel parametresi uygulandı\n"
-            "✅ I/O zamanlayıcıları donanıma göre ayarlandı\n"
-            "✅ Ağ yığını BBR ile hızlandırıldı\n"
-            "✅ Disk ve boot optimizasyonları tamamlandı\n\n"
-            f"[dim]Yedek: {snapshot_name} (Geri almak için Rollback kullanın)[/dim]",
-            border_style="green",
-            title="[bold white]OPTİMİZASYON TAMAMLANDI[/]"
         ))
+
+    def analyze_usage_persona(self) -> tuple:
+        """
+        Detect system usage profile and confidence level.
+        
+        Returns:
+            tuple: (persona_name: str, confidence: float)
+                - persona_name: "Gamer", "Developer", "Server", or "General"
+                - confidence: 0.0-1.0 confidence score
+        """
+        # Get detected profiles from hardware detector
+        profiles = self.hw.detect_workload_profile()
+        chassis = self.hw.chassis.lower()
+        
+        # Priority-based detection
+        if "Gamer" in profiles:
+            return ("Gamer", 0.9)
+        
+        if "Developer" in profiles:
+            return ("Developer", 0.85)
+        
+        if "Server" in profiles or chassis == "server":
+            return ("Server", 0.95)
+        
+        # Check for specific workload indicators
+        if chassis == "laptop":
+            return ("General", 0.7)
+        
+        if chassis == "desktop":
+            # Desktop without specific workload = general purpose
+            return ("General", 0.75)
+        
+        # Default
+        return ("General", 0.6)
 
     def calculate_deep_score(self):
         """Calculate advanced system score with AI insights"""
