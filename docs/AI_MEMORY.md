@@ -420,6 +420,25 @@ from modules.optimizer import *
 
 ---
 
+## 7. Infrastructure & Tooling (New in v0.4.0)
+
+### Auto-Bootstrap Launcher (`run.sh`)
+**Intelligent Entry Point:**
+- **Privilege Management:** Auto-detects EUID. If not root, re-executes itself with `sudo`.
+- **Dependency Resolution:**
+  - System: Checks `dnf`, `lspci`, `dmidecode`, `nmcli`. Auto-installs via `dnf` if missing.
+  - Python: Checks `rich`, `psutil`. Auto-installs via `pip` if missing.
+- **Environment:** Sets `PYTHONPATH`, `DEV_MODE`, and handles virtualenv if present.
+
+### ML Design Debug Console
+**Architecture:**
+- **Monitor:** `debug_monitor.sh` runs in background (xterm/gnome-terminal/konsole).
+- **Log Source:** Watches `fedoraclean_debug.log` via `tail -f`.
+- **Analysis:** `debug_logger.py` implements simple regex-based heuristic analysis on crash logs.
+- **Output:** Color-coded, actionable advice in a separate window.
+
+---
+
 ## 📊 Current Status
 
 ### ✅ Working Features (100%)

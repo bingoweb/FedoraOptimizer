@@ -51,7 +51,7 @@ Every optimization follows our **SCAN → ANALYZE → EXPLAIN → CONFIRM → AP
 - **Smart Launcher**: `run.sh` handles root privileges and environment setup intelligently.
 
 ### 🤖 ML-Enhanced Debug Console
-- **Real-time Monitoring**: Background monitoring of all system operations.
+- **Real-time Monitoring**: Background monitoring of `fedoraclean_debug.log`.
 - **Error Analysis**: Uses pattern recognition to analyze crashes and errors.
 - **Auto-Suggestions**: Provides actionable solutions for detected problems.
 
