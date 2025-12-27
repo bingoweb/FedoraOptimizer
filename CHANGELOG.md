@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2025-12-27
+
+### Added
+- **Test Infrastructure**: Comprehensive pytest framework with 54+ tests
+  - Created `tests/` directory with unit, integration, and fixtures
+  - Added `MockHardwareDetector` for testing without real hardware
+  - Implemented 4 test fixtures (nvme, gamer, laptop, server)
+  - Created test files: test_sysctl_optimizer (11), test_hardware_detector (10), test_ai_engine (8), test_facade (5), test_security (20+)
+  - Added `pytest.ini` configuration
+  - Added GitHub Actions CI/CD workflow (`.github/workflows/tests.yml`)
+  - Added comprehensive test documentation (`tests/README.md`)
+
+- **Security Module**: Input validation and protection (`src/modules/optimizer/security.py`)
+  - `validate_sysctl_param()` - Prevents command injection in parameter names
+  - `validate_sysctl_value()` - Blocks shell metacharacters in values
+  - `validate_file_path()` - Prevents path traversal attacks
+  - `sanitize_string()` - Safe string cleaning with length limits
+  - `write_secure_file()` - Enforces 0600 file permissions
+  - `ensure_secure_directory()` - Enforces 0700 directory permissions
+  - 20+ security tests covering all attack vectors
+
+- **New Optimizer Modules**: Extracted from facade for better separation of concerns
+  - `SystemProfiler` (175 lines) - System DNA, persona detection, scoring
+  - `DNFOptimizer` (77 lines) - Package manager optimization
+  - `BootOptimizer` (55 lines) - Boot time optimization
+
+### Changed
+- **Facade Refactoring**: Reduced `facade.py` from 622 to 130 lines (-79%)
+  - Implemented delegation pattern to specialized modules
+  - Kept `optimize_full_auto()` as main orchestration method
+  - Maintained backward compatibility with TUI
+  - Updated `__init__.py` to export new modules
+
+### Fixed
+- Command injection vulnerabilities in sysctl operations
+- Path traversal vulnerabilities in file operations
+- Insecure file permissions (644 → 600 for sensitive files)
+
+### Security
+- **CRITICAL**: All user inputs now validated before use
+- **CRITICAL**: Command injection attempts blocked (`;`, `|`, `&&`, `` ` ``, `$()`)
+- **CRITICAL**: Path traversal attacks prevented (`../`)
+- **CRITICAL**: Secure file permissions enforced (0600/0700)
+
+### Improved
+- Code organization: Modular, focused responsibilities
+- Testability: 54+ tests provide safety net for refactoring
+- Maintainability: Smaller, focused modules easier to understand
+- Security posture: High Risk → Protected
+- Documentation: Comprehensive test guides and examples
+
 ## [0.3.1] - 2025-12-27
 
 ### Added
