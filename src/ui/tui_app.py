@@ -1,8 +1,8 @@
+```
 """
-Fedora Optimizer - 2025 AI-Powered System Optimization Tool
-Streamlined TUI focused solely on optimization
+Fedora Optimizer - Advanced Terminal UI
+Modern TUI with comprehensive error logging
 """
-
 import sys
 import os
 import time
@@ -17,8 +17,17 @@ from rich.prompt import Prompt, Confirm
 from rich.markup import escape
 from rich.align import Align
 
-# Path fix
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+# Import debug logger for error tracking
+from modules.debug_logger import (
+    log_errors,
+    log_menu_action, 
+    log_operation,
+    log_warning,
+    logger
+)
 
 from modules.optimizer import (
     FedoraOptimizer, 
@@ -144,21 +153,39 @@ class OptimizerApp:
             padding=(0, 1)
         )
 
-    def pause_and_run(self, live, task_func):
-        """Pause live display, run task, resume"""
-        live.stop()
+    def pause_and_run(self, task_func, menu_name="İşlem"):
+        """
+        Execute task with error handling and debug logging.
+        Chrome DevTools benzeri error tracking.
+        """
         console.clear()
-        try:
-            task_func()
-        except Exception as e:
-            log_exception(e)
-            console.print(f"[red]Hata: {escape(str(e))}[/red]")
         
-        Prompt.ask("\n[bold]Devam etmek için Enter'a basın...[/bold]")
-        live.start()
+        # Log menu selection
+        menu_number = menu_name.split()[0] if menu_name else "Unknown"
+        log_menu_action(menu_number, menu_name)
+        
+        try:
+            log_operation(menu_name, "START")
+            task_func()
+            log_operation(menu_name, "SUCCESS")
+            
+        except KeyboardInterrupt:
+            log_warning(f"{menu_name} - Kullanıcı tarafından iptal edildi")
+            console.print("\n[yellow]İşlem iptal edildi.[/yellow]")
+            
+        except Exception as e:
+            log_operation(menu_name, "ERROR")
+            logger.exception(f"Unhandled exception in {menu_name}")
+            
+            console.print(f"\n[red]❌ Hata oluştu: {type(e).__name__}[/red]")
+            console.print(f"[red]Detay: {str(e)}[/red]")
+            console.print(f"\n[yellow]💡 Debug console'u kontrol edin (debug.log)[/yellow]")
+        
+        input("\n[dim]Devam etmek için Enter'a basın...[/dim]")
 
     def run_task(self, live, key):
         """Execute optimization task based on key"""
+        live.stop() # Stop live display before running a task
         if key == '1':
             self.pause_and_run(live, optimizer.full_audit)
         
