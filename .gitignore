@@ -2,6 +2,12 @@
 .agent/
 .gemini/
 
+# Debug console (development only)
+debug_logger.py
+debug_monitor.sh
+DEBUG_CONSOLE.md
+debug.log
+
 # Python
 __pycache__/
 *.py[cod]
