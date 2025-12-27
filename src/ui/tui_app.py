@@ -1,8 +1,8 @@
-```
 """
-Fedora Optimizer - Advanced Terminal UI
-Modern TUI with comprehensive error logging
+Fedora Optimizer - 2025 AI-Powered System Optimization Tool
+Streamlined TUI with optional debug console
 """
+
 import sys
 import os
 import time
@@ -17,17 +17,25 @@ from rich.prompt import Prompt, Confirm
 from rich.markup import escape
 from rich.align import Align
 
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+# Path fix
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import debug logger for error tracking
-from modules.debug_logger import (
-    log_errors,
-    log_menu_action, 
-    log_operation,
-    log_warning,
-    logger
-)
+# Conditional debug imports - only if DEBUG_MODE env var is set
+DEBUG_MODE = os.getenv('DEBUG_MODE', '0') == '1'
+if DEBUG_MODE:
+    try:
+        from modules.debug_logger import (
+            log_errors,
+            log_menu_action,
+            log_operation,
+            log_warning,
+            log_info,
+            logger
+        )
+        print("[DEBUG MODE ENABLED - Logging to debug.log]")
+    except ImportError:
+        DEBUG_MODE = False
+        print("[Debug logger not found - running without debug mode]")
 
 from modules.optimizer import (
     FedoraOptimizer, 
@@ -52,7 +60,12 @@ gaming_opt = GamingOptimizer(optimizer.hw)
 class OptimizerApp:
     """Streamlined Optimization-Only TUI Application"""
     
+    VERSION = "0.4.0"
+    
     def __init__(self):
+        self.console = Console()
+        self.theme = Theme()
+        self.key_listener = KeyListener()
         self.layout = Layout()
         self.message = f"[bold {Theme.PRIMARY}]KOMUT:[/] [white]1-9[/] Seçenekler - [white]0[/] Çıkış"
         
@@ -153,213 +166,159 @@ class OptimizerApp:
             padding=(0, 1)
         )
 
-    def pause_and_run(self, task_func, menu_name="İşlem"):
-        """
-        Execute task with error handling and debug logging.
-        Chrome DevTools benzeri error tracking.
-        """
+    def pause_and_run(self, live, task_func, menu_name="Unknown"):
+        """Pause live display, run task with optional debug logging, resume"""
+        live.stop()
         console.clear()
         
-        # Log menu selection
-        menu_number = menu_name.split()[0] if menu_name else "Unknown"
-        log_menu_action(menu_number, menu_name)
+        # Log menu selection if debug mode
+        if DEBUG_MODE:
+            log_menu_action(menu_name.split()[0] if menu_name else "?", menu_name)
+            log_operation(menu_name, "START")
         
         try:
-            log_operation(menu_name, "START")
             task_func()
-            log_operation(menu_name, "SUCCESS")
+            
+            if DEBUG_MODE:
+                log_operation(menu_name, "SUCCESS")
             
         except KeyboardInterrupt:
-            log_warning(f"{menu_name} - Kullanıcı tarafından iptal edildi")
+            if DEBUG_MODE:
+                log_warning(f"{menu_name} - User cancelled")
             console.print("\n[yellow]İşlem iptal edildi.[/yellow]")
             
         except Exception as e:
-            log_operation(menu_name, "ERROR")
-            logger.exception(f"Unhandled exception in {menu_name}")
+            if DEBUG_MODE:
+                log_operation(menu_name, "ERROR", str(e))
+                logger.exception(f"Exception in {menu_name}")
             
-            console.print(f"\n[red]❌ Hata oluştu: {type(e).__name__}[/red]")
-            console.print(f"[red]Detay: {str(e)}[/red]")
-            console.print(f"\n[yellow]💡 Debug console'u kontrol edin (debug.log)[/yellow]")
+            from modules.logger import log_exception
+            log_exception(e)
+            console.print(f"\n[red]❌ Hata: {type(e).__name__}[/red]")
+            console.print(f"[red]Detay: {escape(str(e))}[/red]")
+            
+            if DEBUG_MODE:
+                console.print(f"\n[yellow]💡 Debug console'da detayları gör (debug.log)[/yellow]")
         
-        input("\n[dim]Devam etmek için Enter'a basın...[/dim]")
+        Prompt.ask("\n[bold]Devam etmek için Enter'a basın...[/bold]")
+        live.start()
 
     def run_task(self, live, key):
         """Execute optimization task based on key"""
-        live.stop() # Stop live display before running a task
         if key == '1':
-            self.pause_and_run(live, optimizer.full_audit)
+            self.pause_and_run(live, optimizer.full_audit, "1 - DERİN TARAMA")
         
         elif key == '2':
-            def quick_opt():
-                console.print("[bold cyan]⚡ AI-Driven Hızlı Optimizasyon[/bold cyan]\n")
-                console.print("[dim]🔍 Sistem taranıyor...[/dim]")
-                
-                # Use AI Engine
-                ai_engine = AIOptimizationEngine(optimizer.hw)
-                proposals = ai_engine.analyze_and_propose_sysctl()
-                
-                if not proposals:
-                    console.print("\n[green]✓ Tüm ayarlar zaten optimal! Değişiklik gerekmez.[/green]")
-                    return
-                
-                # Display proposals
-                ai_engine.display_proposals()
-                
-                # Ask for confirmation
-                if Confirm.ask("\n[bold yellow]Bu değişiklikleri uygulamak istiyor musunuz?[/bold yellow]"):
-                    applied = ai_engine.apply_proposals(category="quick")
-                    console.print(f"\n[green]✓ {len(applied)} değişiklik uygulandı![/green]")
-                else:
-                    console.print("\n[dim]İptal edildi. Değişiklik yapılmadı.[/dim]")
-            self.pause_and_run(live, quick_opt)
+            def quick_optimize():
+                optimizer.apply_dnf5_optimizations()
+                optimizer.optimize_boot_profile()
+            self.pause_and_run(live, quick_optimize, "2 - HIZLI OPTİMİZE")
         
         elif key == '3':
-            self.pause_and_run(live, optimizer.optimize_full_auto)
+            self.pause_and_run(live, optimizer.optimize_full_auto, "3 - TAM OPTİMİZASYON")
         
         elif key == '4':
-            self.pause_and_run(live, gaming_opt.gaming_menu)
+            self.pause_and_run(live, gaming_opt.optimize_gaming_profile, "4 - OYUN MODU")
+        
         
         elif key == '5':
-            def io_opt():
-                console.print("[bold cyan]💾 AI I/O Zamanlayıcı Analizi[/bold cyan]\n")
-                console.print("[dim]🔍 Disk cihazları taranıyor...[/dim]")
+            def io_optimize():
+                from rich.panel import Panel
+                from rich import box
+                console.print()
+                console.print(Panel(
+                    "[bold white]💾 I/O SCHEDULER OPTİMİZASYONU[/]",
+                    border_style="cyan",
+                    box=box.DOUBLE_EDGE
+                ))
+                console.print()
                 
-                ai_engine = AIOptimizationEngine(optimizer.hw)
-                proposals = ai_engine.analyze_io_scheduler()
+                persona, _ = optimizer.analyze_usage_persona()
+                workload = "gaming" if persona == "Gamer" else "server" if persona == "Server" else "desktop"
+                result = optimizer.io_opt.optimize_all_devices(workload)
                 
-                if not proposals:
-                    console.print("\n[green]✓ Tüm disk zamanlayıcıları optimal! Değişiklik gerekmez.[/green]")
-                    return
-                
-                ai_engine.display_proposals()
-                
-                if Confirm.ask("\n[bold yellow]Bu zamanlayıcı değişikliklerini uygulamak istiyor musunuz?[/bold yellow]"):
-                    applied = ai_engine.apply_proposals(category="io")
-                    console.print(f"\n[green]✓ {len(applied)} disk zamanlayıcısı optimize edildi![/green]")
-                else:
-                    console.print("\n[dim]İptal edildi. Değişiklik yapılmadı.[/dim]")
-            self.pause_and_run(live, io_opt)
+                console.print(Panel(
+                    f"[green]✅ I/O Scheduler Optimize Edildi![/]\n\n"
+                    f"[white]• Profil: {workload}[/]\n"
+                    f"[white]• Disk tipi: {optimizer.hw.get_simple_disk_type()}[/]",
+                    border_style="green",
+                    box=box.ROUNDED
+                ))
+            self.pause_and_run(live, io_optimize, "5 - I/O SCHEDULER")
         
         elif key == '6':
-            def net_opt():
-                console.print("[bold cyan]🌐 AI Ağ Optimizasyonu Analizi[/bold cyan]\n")
-                console.print("[dim]🔍 Ağ parametreleri taranıyor...[/dim]")
+            def network_optimize():
+                from rich.panel import Panel
+                from rich import box
+                console.print()
+                console.print(Panel(
+                    "[bold white]🌐 AĞ OPTİMİZASYONU[/]",
+                    border_style="cyan",
+                    box=box.DOUBLE_EDGE
+                ))
+                console.print()
                 
-                ai_engine = AIOptimizationEngine(optimizer.hw)
-                proposals = ai_engine.analyze_network_only()
+                engine = AIOptimizationEngine(optimizer.hw)
+                engine.analyze_and_propose_sysctl("general")
                 
-                if not proposals:
-                    console.print("\n[green]✓ Ağ ayarları zaten optimal! (BBR aktif, buffer'lar yeterli)[/green]")
-                    return
-                
-                ai_engine.display_proposals()
-                
-                if Confirm.ask("\n[bold yellow]Bu ağ optimizasyonlarını uygulamak istiyor musunuz?[/bold yellow]"):
-                    applied = ai_engine.apply_proposals(category="network")
-                    console.print(f"\n[green]✓ {len(applied)} ağ parametresi optimize edildi![/green]")
+                # Filter network proposals
+                net_proposals = [p for p in engine.proposals if p.category == "network"]
+                if net_proposals:
+                    engine.display_proposals()
+                    if Confirm.ask("\n[yellow]Bu ağ optimizasyonlarını uygulansın mı?[/]"):
+                        engine.apply_proposals(category="network")
+                        console.print(Panel(f"[green]✅ {len(net_proposals)} ağ parametresi optimize edildi![/]", border_style="green"))
                 else:
-                    console.print("\n[dim]İptal edildi. Değişiklik yapılmadı.[/dim]")
-            self.pause_and_run(live, net_opt)
+                    console.print(Panel("[green]✅ Ağ ayarları zaten optimal![/]", border_style="green"))
+            self.pause_and_run(live, network_optimize, "6 - AĞ OPTİMİZE")
         
         elif key == '7':
-            def kernel_opt():
-                console.print("[bold cyan]🔧 AI Kernel Parametreleri Analizi[/bold cyan]\n")
-                console.print("[dim]🔍 Mevcut kernel ayarları taranıyor...[/dim]")
+            def kernel_optimize():
+                from rich.panel import Panel
+                from rich import box
+                console.print()
+                console.print(Panel(
+                    "[bold white]⚙️  KERNEL PARAMETRELERİ[/]",
+                    border_style="cyan",
+                    box=box.DOUBLE_EDGE
+                ))
+                console.print()
                 
-                # Use AI Engine for analysis
-                ai_engine = AIOptimizationEngine(optimizer.hw)
-                proposals = ai_engine.analyze_and_propose_sysctl()
+                persona, _ = optimizer.analyze_usage_persona()
+                engine = AIOptimizationEngine(optimizer.hw)
+                engine.analyze_and_propose_sysctl(persona.lower() if persona != "General" else "general")
                 
-                if not proposals:
-                    console.print("\n[green]✓ Tüm kernel parametreleri optimal! Değişiklik gerekmez.[/green]")
-                    
-                    # Still show current state for info
-                    persona, _ = optimizer.analyze_usage_persona()
-                    console.print(f"\n[dim]Algılanan profil: {persona}[/dim]")
-                    return
-                
-                # Display proposals with explanations
-                ai_engine.display_proposals()
-                
-                # Ask for confirmation
-                if Confirm.ask("\n[bold yellow]Bu kernel parametrelerini uygulamak istiyor musunuz?[/bold yellow]"):
-                    applied = ai_engine.apply_proposals(category="kernel")
-                    console.print(f"\n[green]✓ {len(applied)} kernel parametresi optimize edildi![/green]")
-                    console.print("[dim]Değişiklikler kalıcı olarak /etc/sysctl.d/ altına kaydedildi.[/dim]")
+                if engine.proposals:
+                    engine.display_proposals()
+                    if Confirm.ask("\n[yellow]Bu kernel parametreleri uygulansın mı?[/]"):
+                        engine.apply_proposals()
+                        console.print(Panel(f"[green]✅ {len(engine.proposals)} kernel parametresi optimize edildi![/]", border_style="green"))
                 else:
-                    console.print("\n[dim]İptal edildi. Hiçbir değişiklik yapılmadı.[/dim]")
-            self.pause_and_run(live, kernel_opt)
+                    console.print(Panel("[green]✅ Kernel parametreleri zaten optimal![/]", border_style="green"))
+            self.pause_and_run(live, kernel_optimize, "7 - KERNEL AYAR")
+
         
         elif key == '8':
-            def rollback():
-                console.print("[bold cyan]↩️ GERİ AL MERKEZİ[/bold cyan]\n")
+            def show_rollback_menu():
+                tm = TransactionManager()
+                transactions = tm.get_all_transactions()
                 
-                tx_manager = TransactionManager()
-                last_tx = tx_manager.get_last_transaction()
+                if not transactions:
+                    console.print("[yellow]Geri alınacak işlem yok.[/yellow]")
+                    return
                 
-                # Menu options
-                console.print("[bold]Seçenekler:[/bold]\n")
+                console.print("\n[bold cyan]Geri Alınabilir İşlemler:[/]\n")
+                for i, tx in enumerate(transactions, 1):
+                    console.print(f"{i}. {tx['timestamp']} - {tx['type']}")
                 
-                if last_tx:
-                    elapsed = ""
-                    try:
-                        from datetime import datetime
-                        tx_time = datetime.fromisoformat(last_tx['timestamp'])
-                        diff = datetime.now() - tx_time
-                        if diff.seconds < 3600:
-                            elapsed = f"{diff.seconds // 60} dk önce"
-                        else:
-                            elapsed = f"{diff.seconds // 3600} saat önce"
-                    except:
-                        elapsed = last_tx['timestamp'][:16]
-                    
-                    console.print(f"  [bold cyan]1.[/] SON İŞLEMİ GERİ AL")
-                    console.print(f"     [dim]└─ {last_tx['description']} ({elapsed})[/dim]\n")
-                else:
-                    console.print(f"  [dim]1. Son işlem yok[/dim]\n")
-                
-                console.print(f"  [bold cyan]2.[/] İŞLEM GEÇMİŞİ")
-                console.print(f"     [dim]└─ Tüm kayıtlı işlemleri gör[/dim]\n")
-                
-                console.print(f"  [bold cyan]3.[/] VARSAYILANLARA DÖN")
-                console.print(f"     [dim]└─ Tüm optimizasyonları sıfırla[/dim]\n")
-                
-                console.print(f"  [dim]0. Geri[/dim]\n")
-                
-                choice = Prompt.ask("Seçiminiz", default="0")
-                
-                if choice == "1" and last_tx:
-                    if Confirm.ask(f"'{last_tx['description']}' geri alınsın mı?"):
-                        tx_manager.undo_last()
-                
-                elif choice == "2":
-                    transactions = tx_manager.list_transactions(limit=10)
-                    if not transactions:
-                        console.print("\n[yellow]Henüz işlem geçmişi yok.[/yellow]")
-                        return
-                    
-                    console.print("\n[bold]İşlem Geçmişi:[/bold]\n")
-                    for i, tx in enumerate(transactions, 1):
-                        console.print(f"  {i}. [{tx['id']}] {tx['description']}")
-                        console.print(f"     [dim]{tx['timestamp'][:16]} - {len(tx['changes'])} değişiklik[/dim]")
-                    
-                    sel = Prompt.ask("\nGeri alınacak işlem numarası (0=iptal)", default="0")
-                    try:
-                        idx = int(sel) - 1
-                        if 0 <= idx < len(transactions):
-                            tx = transactions[idx]
-                            if Confirm.ask(f"'{tx['description']}' geri alınsın mı?"):
-                                tx_manager.undo_by_id(tx['id'])
-                    except:
-                        pass
-                
-                elif choice == "3":
-                    console.print("\n[bold red]⚠️ UYARI:[/bold red] Tüm optimizasyonlar varsayılana dönecek!")
-                    console.print("[dim]Bu işlem geri alınamaz.[/dim]\n")
-                    if Confirm.ask("Devam etmek istiyor musunuz?"):
-                        tx_manager.reset_to_defaults()
+                choice = Prompt.ask("\nİşlem no", choices=[str(i) for i in range(1, len(transactions)+1)] + ["0"])
+                if choice != "0":
+                    tx_id = transactions[int(choice)-1]['uuid']
+                    if Confirm.ask(f"[yellow]Bu işlemi geri almak istediğine emin misin?[/yellow]"):
+                        tm.undo_transaction(tx_id)
+                        console.print("[green]✓ İşlem geri alındı[/green]")
             
-            self.pause_and_run(live, rollback)
+            self.pause_and_run(live, show_rollback_menu, "8 - GERİ AL")
 
     def run(self):
         """Main application loop"""

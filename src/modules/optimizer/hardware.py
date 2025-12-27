@@ -6,9 +6,13 @@ import os
 import re
 import platform
 import shutil
+import logging
 from typing import List, Dict
 import psutil
 from ..utils import run_command
+
+logger = logging.getLogger("FedoraOptimizerDebug")
+
 
 
 class HardwareDetector:
@@ -67,8 +71,8 @@ class HardwareDetector:
             if freq:
                 info["freq"] = f"{freq.max:.0f} MHz" if freq.max > 0 else \
                                f"{freq.current:.0f} MHz"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"CPU details detection error: {e}")
         return info
 
     def _get_cpu_microarchitecture(self) -> Dict:
@@ -95,8 +99,8 @@ class HardwareDetector:
                 if os.path.exists("/sys/devices/system/cpu/cpu0/topology/cluster_id"):
                     ma["hybrid"] = True
                     ma["topology"] = "Hybrid (Big.LITTLE)"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"CPU microcode detection error: {e}")
 
         try:
             base = "/sys/devices/system/cpu/cpu0/cpufreq"
@@ -111,8 +115,8 @@ class HardwareDetector:
             if os.path.exists(epp_path):
                 with open(epp_path, "r", encoding='utf-8') as f:
                     ma["epp"] = f.read().strip()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"CPU config detection error: {e}")
 
         return ma
 
@@ -137,8 +141,8 @@ class HardwareDetector:
                         speeds = re.findall(r"Speed: (\d+) MHz", out)
                     if speeds:
                         info["speed"] = f"{max(map(int, speeds))} MT/s"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"RAM details detection error: {e}")
         return info
 
     def _get_gpu_details(self) -> str:
@@ -257,8 +261,8 @@ class HardwareDetector:
                 info["virtualization"] = "VT-x/AMD-V Destekli"
             else:
                 info["virtualization"] = "Sanallaştırma Yok"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"BIOS details detection error: {e}")
 
         return info
 
@@ -281,30 +285,30 @@ class HardwareDetector:
         try:
             with open("/proc/sys/net/ipv4/tcp_congestion_control", "r", encoding='utf-8') as f:
                 features["bbr_version"] = f.read().strip()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"BBR version detection error: {e}")
 
         try:
             with open("/sys/kernel/mm/transparent_hugepage/enabled", "r", encoding='utf-8') as f:
                 match = re.search(r'\[(\w+)\]', f.read())
                 if match:
                     features["transparent_hugepages"] = match.group(1)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Transparent hugepages detection error: {e}")
 
         try:
             with open("/proc/swaps", "r", encoding='utf-8') as f:
                 if "zram" in f.read():
                     features["zram"] = True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Hardware detection error: {e}")
 
         try:
             with open("/sys/module/zswap/parameters/enabled", "r", encoding='utf-8') as f:
                 if f.read().strip() == "Y":
                     features["zswap"] = True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"ZSwap detection error: {e}")
 
         return features
 
@@ -328,6 +332,7 @@ class HardwareDetector:
                                 data[kind] = kv
                         stats[res] = data
             except Exception:
+                # Some kernels don't support PSI
                 pass
         return stats
 

@@ -45,6 +45,16 @@ Every optimization follows our **SCAN → ANALYZE → EXPLAIN → CONFIRM → AP
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### 🚀 Auto-Bootstrap & Self-Healing
+- **Zero Configuration**: Just clone and run. The system checks itself.
+- **Auto-Dependency**: Automatically installs `rich`, `psutil` and system tools if missing.
+- **Smart Launcher**: `run.sh` handles root privileges and environment setup intelligently.
+
+### 🤖 ML-Enhanced Debug Console
+- **Real-time Monitoring**: Background monitoring of all system operations.
+- **Error Analysis**: Uses pattern recognition to analyze crashes and errors.
+- **Auto-Suggestions**: Provides actionable solutions for detected problems.
+
 ### 🔍 Deep System Analysis
 - **CPU Detection**: Intel (Hybrid/Legacy), AMD (Zen/Pre-Zen), ARM, VM
 - **Disk Detection**: NVMe, SATA SSD, HDD, eMMC
@@ -76,8 +86,8 @@ Every optimization follows our **SCAN → ANALYZE → EXPLAIN → CONFIRM → AP
 git clone https://github.com/bingoweb/FedoraOptimizer.git
 cd FedoraOptimizer
 
-# Install dependencies
-./setup.sh
+# Run (Auto-installs dependencies)
+./run.sh
 
 # Run with root privileges
 sudo ./run.sh

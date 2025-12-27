@@ -137,17 +137,100 @@ class FedoraOptimizer:
     
     def full_audit(self):
         """
-        Full system audit - delegated to profiler.
-        (Temporarily simplified during refactoring)
+        Full system audit with Premium UI.
+        Deep system DNA analysis with stunning visual display.
         """
-        console.print("[yellow]Full audit temporarily simplified during refactoring[/]")
-        console.print("[dim]Run 'Deep Scan' for detailed analysis[/dim]\n")
+        from rich.table import Table
+        from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+        from rich import box
         
-        # Simple mock scores for now
-        return {
-            "cpu": {"score": 75, "status": "Good"},
-            "memory": {"score": 80, "status": "Good"},
-            "disk": {"score": 85, "status": "Excellent"},
-            "network": {"score": 70, "status": "Fair"},
-            "overall": 77.5
-        }
+        # Premium Header
+        console.print()
+        console.print(Panel(
+            "[bold white]🧬 DERİN SİSTEM ANALİZİ[/]",
+            border_style="cyan",
+            box=box.DOUBLE_EDGE,
+            padding=(0, 2)
+        ))
+        console.print()
+        
+        # Scanning animation
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            console=console,
+            transient=True
+        ) as progress:
+            task = progress.add_task("Sistem DNA'sı taranıyor...", total=100)
+            
+            # Gather data with progress updates
+            progress.update(task, description="CPU analizi...", advance=20)
+            dna = self.profiler.get_system_dna()
+            
+            progress.update(task, description="Kullanım profili tespiti...", advance=30)
+            persona, confidence = self.profiler.analyze_usage_persona()
+            
+            progress.update(task, description="Sonuçlar hazırlanıyor...", advance=50)
+        
+        # DNA Table
+        dna_table = Table(
+            title="[bold cyan]Sistem DNA'sı[/]",
+            box=box.ROUNDED,
+            border_style="cyan",
+            header_style="bold white on dark_blue",
+            show_header=False,
+            padding=(0, 2)
+        )
+        dna_table.add_column("DNA", style="white")
+        
+        for item in dna:
+            dna_table.add_row(item)
+        
+        console.print(dna_table)
+        console.print()
+        
+        # Persona Card
+        color_map = {"Gamer": "magenta", "Developer": "green", "Server": "blue"}
+        color = color_map.get(persona, "cyan")
+        icon_map = {"Gamer": "🎮", "Developer": "💻", "Server": "🖥️", "General": "🖥️"}
+        icon = icon_map.get(persona, "🖥️")
+        
+        confidence_bar = "█" * int(confidence * 10) + "░" * (10 - int(confidence * 10))
+        
+        console.print(Panel(
+            f"[bold {color}]{icon} ALGILANAN PROFİL: {persona.upper()}[/]\n\n"
+            f"[white]Güven Seviyesi:[/] [{color}]{confidence_bar}[/] {int(confidence*100)}%\n\n"
+            f"[dim]┌─ Kasa Tipi: {self.hw.chassis}[/]\n"
+            f"[dim]├─ CPU Çekirdek: {self.hw.cpu_info['cores']}[/]\n"
+            f"[dim]├─ RAM: {self.hw.ram_info['total']} GB[/]\n"
+            f"[dim]└─ GPU: {self.hw.gpu_info[:40]}...[/]" if len(self.hw.gpu_info) > 40 else f"[dim]└─ GPU: {self.hw.gpu_info}[/]",
+            title=f"[bold {color}]Kullanım Profili[/]",
+            border_style=color,
+            box=box.ROUNDED,
+            padding=(1, 2)
+        ))
+        console.print()
+        
+        # Suggestions panel
+        suggestions = []
+        if persona == "Gamer":
+            suggestions = ["Oyun modu (4) ile ekstra FPS kazanın", "I/O scheduler bfq moduna geçin"]
+        elif persona == "Developer":
+            suggestions = ["Container/VM performansı optimize edildi", "Derleme hızı artırıldı"]
+        else:
+            suggestions = ["Genel kullanım için dengeli ayarlar", "Enerji verimliliği optimize edildi"]
+        
+        console.print(Panel(
+            f"[bold yellow]💡 ÖNERİLER[/]\n\n" + 
+            "\n".join([f"[white]• {s}[/]" for s in suggestions]) +
+            "\n\n[dim]TAM OPTİMİZASYON (3) ile tüm ayarları uygulayın.[/dim]",
+            border_style="yellow",
+            box=box.ROUNDED
+        ))
+        console.print()
+        
+        return {"dna": dna, "persona": persona, "confidence": confidence}
+
+

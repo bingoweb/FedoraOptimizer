@@ -8,6 +8,10 @@ import platform
 from datetime import datetime
 from ..utils import run_command, console
 
+import logging
+
+logger = logging.getLogger("FedoraOptimizerDebug")
+
 class OptimizationBackup:
     """Backup and restore system for optimization rollback"""
 
@@ -40,8 +44,8 @@ class OptimizationBackup:
                 dst = os.path.join(snapshot_dir, os.path.basename(src))
                 try:
                     shutil.copy2(src, dst)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Backup copy failed for {src}: {e}")
 
         # Save current sysctl values
         s, out, _ = run_command("sysctl -a 2>/dev/null")

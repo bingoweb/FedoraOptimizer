@@ -6,9 +6,12 @@ import os
 import re
 import json
 import uuid
+import logging
 from datetime import datetime
 from typing import List, Dict, Optional
 from ..utils import run_command, console
+
+logger = logging.getLogger("FedoraOptimizerDebug")
 
 class TransactionManager:
     """
@@ -35,7 +38,8 @@ class TransactionManager:
         try:
             with open(self.TRANSACTION_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Transaction load warning: {e}")
             return []
 
     def _save_transactions(self, transactions: List[Dict]):
@@ -44,6 +48,7 @@ class TransactionManager:
                 json.dump(transactions, f, indent=2, ensure_ascii=False)
         except Exception as e:
             console.print(f"[red]Transaction kayıt hatası: {e}[/red]")
+            logger.error(f"Failed to save transactions: {e}")
 
     def record_transaction(self, category: str, description: str,
                           changes: List[Dict]) -> str:
@@ -58,8 +63,6 @@ class TransactionManager:
         Returns:
             Transaction ID
         """
-
-
         tx_id = str(uuid.uuid4())[:8]
         transaction = {
             "id": tx_id,
@@ -132,7 +135,6 @@ class TransactionManager:
                 # Special case: I/O scheduler or file path
                 if "Scheduler" in param:
                     # Extract device from param like "I/O Scheduler (nvme0n1)"
-
                     match = re.search(r'\((\w+)\)', param)
                     if match:
                         dev = match.group(1)
@@ -200,8 +202,8 @@ class TransactionManager:
 
                 with open(conf_file, "w", encoding="utf-8") as f:
                     f.writelines(new_lines)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Config cleanup failed for {conf_file}: {e}")
 
     def reset_to_defaults(self) -> bool:
         """
@@ -259,6 +261,7 @@ class TransactionManager:
                     console.print(f"[green]✓ Silindi:[/] {config_file}")
                 except Exception as e:
                     console.print(f"[red]✗ Silinemedi ({config_file}):[/] {e}")
+                    logger.warning(f"Failed to delete config {config_file}: {e}")
         
         # Reload system defaults
         console.print("\n[dim]Sistem varsayılanları yükleniyor...[/dim]")

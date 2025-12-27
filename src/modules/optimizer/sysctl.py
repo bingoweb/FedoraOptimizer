@@ -8,6 +8,10 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from ..utils import run_command, console
 from .hardware import HardwareDetector
+import logging
+
+logger = logging.getLogger("FedoraOptimizerDebug")
+
 
 class SysctlOptimizer:
     """2025 Kernel Parameter Optimization Engine - Research Based"""
@@ -174,8 +178,8 @@ class SysctlOptimizer:
             try:
                 with open(self.conf_file, "r", encoding="utf-8") as f:
                     current_conf = f.read()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Could not read existing sysctl config: {e}")
 
         # Find new lines to add
         new_lines = []

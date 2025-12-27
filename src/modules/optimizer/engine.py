@@ -43,14 +43,21 @@ class AIOptimizationEngine:
 
     def scan_current_sysctl(self, params: List[str]) -> Dict[str, str]:
         """Scan current sysctl values for given parameters"""
+        import logging
+        logger = logging.getLogger("FedoraOptimizerDebug")
+        
         current = {}
         for param in params:
             s, out, _ = run_command(f"sysctl -n {param} 2>/dev/null")
-            if s:
-                current[param] = out.strip()
+            if s and out:
+                value = out.strip()
+                current[param] = value
+                logger.debug(f"🔍 SCAN: {param} = '{value}'")
             else:
                 current[param] = "N/A"
+                logger.debug(f"🔍 SCAN: {param} = N/A (not found)")
         return current
+
 
     def scan_current_state(self) -> Dict:
         """Full system state scan"""
@@ -80,19 +87,23 @@ class AIOptimizationEngine:
         disk_type = state["disk_type"]
         profiles = state.get("profiles", [])
 
-        # Key parameters to analyze
+        # Key parameters to analyze - ALL parameters that might be optimized
         params_to_check = [
             "vm.swappiness",
             "vm.dirty_ratio",
+            "vm.dirty_writeback_centisecs",
+            "vm.max_map_count",
             "net.ipv4.tcp_congestion_control",
             "net.ipv4.tcp_fastopen",
+            "net.core.rmem_max",
+            "net.core.wmem_max",
+            "net.core.netdev_max_backlog",
             "kernel.sched_autogroup_enabled",
-            "vm.max_map_count",
             "kernel.sched_cfs_bandwidth_slice_us",
-            "fs.inotify.max_user_watches",
-            "vm.dirty_writeback_centisecs",
             "kernel.sched_itmt_enabled",
+            "fs.inotify.max_user_watches",
         ]
+
 
         current_values = self.scan_current_sysctl(params_to_check)
 
@@ -256,16 +267,18 @@ class AIOptimizationEngine:
                     category="power", priority="recommended"
                 ))
 
-        # Intel Hybrid
+        # Intel Hybrid (only propose if parameter exists on system)
         if state.get("cpu_hybrid", False):
-            curr_itmt = current_values.get("kernel.sched_itmt_enabled", "0")
-            if curr_itmt != "1":
+            curr_itmt = current_values.get("kernel.sched_itmt_enabled", "N/A")
+            # Only propose if kernel supports this parameter
+            if curr_itmt != "N/A" and curr_itmt != "1":
                 self.proposals.append(OptimizationProposal(
                     param="kernel.sched_itmt_enabled",
                     current=curr_itmt, proposed="1",
                     reason="[INTEL HYBRID] Thread Director (ITMT) aktivasyonu.",
                     category="cpu", priority="critical"
                 ))
+
 
         # Intel GPU (GuC/HuC)
         if "Intel" in self.hw.gpu_info:
@@ -277,7 +290,10 @@ class AIOptimizationEngine:
                         param="i915.enable_guc",
                         current="disabled", proposed="2",
                         reason="[INTEL GPU] Iris Xe performans için GuC/HuC Firmware.",
-                        category="gpu", priority="recommended",
+                        category="gpu", priority="recommended"
+                    ))
+            except (OSError, PermissionError):
+                pass
         
         # Additional network checks - buffer sizes
         current_rmem = current_values.get("net.core.rmem_max", "0")
@@ -345,6 +361,13 @@ class AIOptimizationEngine:
 
     def apply_proposals(self, backup_first: bool = True, category: str = "general") -> List[str]:
         """Apply approved proposals and return list of applied changes"""
+        import logging
+        logger = logging.getLogger("FedoraOptimizerDebug")
+        
+        logger.info("="*60)
+        logger.info(f"📦 APPLY_PROPOSALS STARTED - Category: {category}")
+        logger.info(f"   Total proposals: {len(self.proposals)}")
+        
         applied = []
         changes_for_tx = []
 
@@ -352,18 +375,42 @@ class AIOptimizationEngine:
             try:
                 OptimizationBackup().create_snapshot()
                 console.print("[green]✓ Yedek oluşturuldu.[/green]")
-            except Exception:
-                pass
+                logger.info("✓ Backup created")
+            except Exception as e:
+                logger.warning(f"Backup failed: {e}")
 
-        for p in self.proposals:
+        for i, p in enumerate(self.proposals, 1):
+            logger.info(f"\n--- Proposal {i}/{len(self.proposals)} ---")
+            logger.info(f"   Param: {p.param}")
+            logger.info(f"   Current: '{p.current}'")
+            logger.info(f"   Proposed: '{p.proposed}'")
+            logger.info(f"   Category: {p.category}")
+            
             try:
                 success = False
                 if p.command:
-                    s, _, _ = run_command(p.command, sudo=True)
+                    cmd = p.command
+                    logger.info(f"   Command (custom): {cmd}")
+                    s, stdout, stderr = run_command(cmd, sudo=True)
+                    logger.info(f"   Result: success={s}, stdout='{stdout}', stderr='{stderr}'")
                     success = s
                 else:
-                    s, _, _ = run_command(f"sysctl -w {p.param}={p.proposed}", sudo=True)
+                    cmd = f"sysctl -w {p.param}={p.proposed}"
+                    logger.info(f"   Command: {cmd}")
+                    s, stdout, stderr = run_command(cmd, sudo=True)
+                    logger.info(f"   Result: success={s}, stdout='{stdout}', stderr='{stderr}'")
                     success = s
+                    
+                    # VERIFY: Read back the value to confirm it was applied
+                    verify_s, verify_out, _ = run_command(f"sysctl -n {p.param}", sudo=True)
+                    actual_value = verify_out.strip() if verify_out else "UNKNOWN"
+                    logger.info(f"   VERIFY: Read back value = '{actual_value}'")
+                    
+                    if actual_value != p.proposed:
+                        logger.error(f"   ❌ VERIFICATION FAILED! Expected '{p.proposed}' but got '{actual_value}'")
+                        success = False
+                    else:
+                        logger.info(f"   ✅ VERIFICATION OK: Value correctly set to '{actual_value}'")
 
                 if success:
                     applied.append(f"{p.param}: {p.current} → {p.proposed}")
@@ -371,23 +418,33 @@ class AIOptimizationEngine:
                         "param": p.param, "old": p.current, "new": p.proposed
                     })
                     console.print(f"[green]✓ {p.param} uygulandı[/green]")
+                    logger.info(f"   ✅ SUCCESS: {p.param}")
                 else:
                     console.print(f"[red]✗ {p.param} uygulanamadı[/red]")
+                    logger.error(f"   ❌ FAILED: {p.param}")
             except Exception as e:
                 console.print(f"[red]Hata: {e}[/red]")
+                logger.error(f"   💥 EXCEPTION: {e}")
 
         if changes_for_tx:
             try:
                 tm = TransactionManager()
                 desc = f"{category.title()} Optimize - {len(changes_for_tx)} items"
                 tm.record_transaction(category, desc, changes_for_tx)
-            except Exception:
-                pass
+                logger.info(f"✓ Transaction recorded: {desc}")
+            except Exception as e:
+                logger.warning(f"Transaction recording failed: {e}")
 
         if applied:
+            logger.info(f"Persisting {len(applied)} changes to sysctl.d...")
             self._persist_sysctl_changes()
+        
+        logger.info(f"\n📦 APPLY_PROPOSALS COMPLETED")
+        logger.info(f"   Applied: {len(applied)} / {len(self.proposals)}")
+        logger.info("="*60)
 
         return applied
+
 
     def _persist_sysctl_changes(self):
         conf_file = "/etc/sysctl.d/99-fedoraclean.conf"

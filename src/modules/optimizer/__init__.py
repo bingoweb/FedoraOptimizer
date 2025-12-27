@@ -1,7 +1,7 @@
 """
-Fedora Optimizer - AI Optimization Engine
-Core logic for system scanning, analysis, and optimization ap"""
-Optimizer package - Modular system optimization.
+Fedora Optimizer Package - Modular AI-powered system optimization.
+
+Core logic for system scanning, analysis, and optimization.
 """
 
 from .facade import FedoraOptimizer

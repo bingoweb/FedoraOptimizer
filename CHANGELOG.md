@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-12-27
+
+### New Features 🚀
+- **Auto-Bootstrap System**: New `run.sh` automatically handles all dependencies
+  - Checks/Installs system tools (`dnf`, `lspci`, `nmcli`, `dmidecode`)
+  - Auto-installs Python libraries (`rich`, `psutil`)
+  - Manages/Requests proper root privileges
+  - Smart environment detection (Dev vs Prod)
+- **ML-Enhanced Debug Console**: Intelligent error analysis system
+  - Automatic pattern recognition for common errors
+  - Severity scoring (0-10) and impact analysis
+  - Suggests specific fixes based on error signatures
+  - Persistent background monitoring via `debug_monitor.sh`
+- **Deep Code Clean**: Extensive refactoring and stabilization
+  - Replaced 50+ silent `pass` blocks with specific debug logging
+  - Fixed `IndentationError` and structural issues in key modules
+  - Standardized logging across all modules (`hardware`, `backup`, `sysctl`, `transaction`)
+
+### Improvements 🔧 
+- **Robust Error Handling**: Critical modules now catch and log specific exceptions instead of crashing or silencing them
+- **UI Responsiveness**: Better terminal resizing and layout management
+- **Dependency Management**: No manual setup required for end users
+
+### Fixes 🐛
+- Fixed critical optimization state detection bug where applied settings were not detected on re-scan
+- Fixed `transaction.py` corruption and indentation errors
+- Resolved network parameter defaulting issues in `engine.py`
+
 ## [0.3.2] - 2025-12-27
 
 ### Added
