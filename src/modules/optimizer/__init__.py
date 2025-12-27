@@ -1,24 +1,40 @@
 """
 Fedora Optimizer - AI Optimization Engine
-Core logic for system scanning, analysis, and optimization application.
+Core logic for system scanning, analysis, and optimization ap"""
+Optimizer package - Modular system optimization.
 """
+
 from .facade import FedoraOptimizer
 from .hardware import HardwareDetector
-from .engine import AIOptimizationEngine
-from .transaction import TransactionManager
-from .backup import OptimizationBackup
-from .models import OptimizationProposal, OptimizationTransaction
 from .sysctl import SysctlOptimizer
 from .io_scheduler import IOSchedulerOptimizer
+from .backup import OptimizationBackup
+from .transaction import TransactionManager
+from .engine import AIOptimizationEngine
+from .models import OptimizationProposal, OptimizationTransaction
+from .system_profiler import SystemProfiler
+from .dnf_optimizer import DNFOptimizer
+from .boot_optimizer import BootOptimizer
+from .security import (
+    validate_sysctl_param,
+    validate_sysctl_value,
+    ValidationError
+)
 
 __all__ = [
-    "FedoraOptimizer",
-    "HardwareDetector",
-    "AIOptimizationEngine",
-    "TransactionManager",
-    "OptimizationBackup",
-    "OptimizationProposal",
-    "OptimizationTransaction",
-    "SysctlOptimizer",
-    "IOSchedulerOptimizer"
+    'FedoraOptimizer',
+    'HardwareDetector',
+    'SysctlOptimizer',
+    'IOSchedulerOptimizer',
+    'OptimizationBackup',
+    'TransactionManager',
+    'AIOptimizationEngine',
+    'OptimizationProposal',
+    'OptimizationTransaction',
+    'SystemProfiler',
+    'DNFOptimizer',
+    'BootOptimizer',
+    'validate_sysctl_param',
+    'validate_sysctl_value',
+    'ValidationError',
 ]
