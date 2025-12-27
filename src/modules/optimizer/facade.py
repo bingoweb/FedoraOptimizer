@@ -60,45 +60,68 @@ class FedoraOptimizer:
     
     # Main orchestration method
     
+    
     def optimize_full_auto(self):
         """
-        Full automatic optimization (orchestration).
+        Full automatic optimization with progress tracking.
         
         This is the main orchestration method that coordinates
-        all specialized optimizers for a complete system optimization.
+        all specialized optimizers with real-time progress feedback.
         """
+        from rich.progress import Progress, SpinnerColumn, BarColumn, TaskProgressColumn
+        
         console.print("\n[bold magenta]🚀 TAM OTOMATİK OPTİMİZASYON[/]\n")
         
-        # 1. Create backup first
-        snapshot_name = self.backup.create_snapshot("full-auto")
-        console.print(f"[dim]Yedek oluşturuldu: {snapshot_name}[/]\n")
+        with Progress(
+            SpinnerColumn(),
+            "[progress.description]{task.description}",
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console
+        ) as progress:
+            
+            task = progress.add_task("[cyan]Başlatılıyor...", total=100)
+            
+            # 1. Create backup (10%)
+            progress.update(task, description="[cyan]📦 Yedek oluşturuluyor...")
+            snapshot_name = self.backup.create_snapshot("full-auto")
+            progress.advance(task, 10)
+            
+            # 2. Detect persona (15%)
+            progress.update(task, description="[cyan]🔍 Kullanım profili tespit ediliyor...")
+            persona, confidence = self.analyze_usage_persona()
+            progress.advance(task, 5)
+            
+            # 3. DNF optimization (25%)
+            progress.update(task, description="[cyan]📦 Paket yöneticisi optimize ediliyor...")
+            self.apply_dnf5_optimizations()
+            progress.advance(task, 10)
+            
+            # 4. Boot optimization (40%)
+            progress.update(task, description="[cyan]⚡ Boot süresi optimize ediliyor...")
+            self.optimize_boot_profile()
+            progress.advance(task, 15)
+            
+            # 5. I/O scheduler (60%)
+            progress.update(task, description="[cyan]💾 I/O zamanlayıcılar ayarlanıyor...")
+            workload = "gaming" if persona == "Gamer" else \
+                       "server" if persona == "Server" else "desktop"
+            self.io_opt.optimize_all_devices(workload)
+            progress.advance(task, 20)
+            
+            # 6. Sysctl optimization (100%)
+            progress.update(task, description="[cyan]⚙️  Kernel parametreleri uygulanıyor...")
+            persona_lower = persona.lower() if persona != "General" else "general"
+            tweaks = self.sysctl_opt.generate_optimized_config(persona_lower)
+            self.sysctl_opt.apply_config(tweaks)
+            progress.advance(task, 40)
+            
+            progress.update(task, description="[green]✅ Tamamlandı!")
         
-        # 2. Detect system persona  
-        persona, confidence = self.analyze_usage_persona()
-        console.print(f"[cyan]Tespit edilen profil:[/] {persona} ({confidence:.0%} güven)\n")
-        
-        # 3. Apply optimizations via specialized modules
-        console.print("[bold]Optimizasyonlar uygulanıyor...[/]\n")
-        
-        # DNF optimization
-        self.apply_dnf5_optimizations()
-        
-        # Boot optimization
-        self.optimize_boot_profile()
-        
-        # I/O scheduler optimization
-        workload = "gaming" if persona == "Gamer" else \
-                   "server" if persona == "Server" else "desktop"
-        self.io_opt.optimize_all_devices(workload)
-        
-        # Sysctl optimization
-        persona_lower = persona.lower() if persona != "General" else "general"
-        tweaks = self.sysctl_opt.generate_optimized_config(persona_lower)
-        self.sysctl_opt.apply_config(tweaks)
-        
-        # 4. Success message
+        # Success panel
         console.print(Panel(
-            "[bold green]🎉 SİSTEM 2025 YZ MOTORİYLE OPTİMİZE EDİLDİ![/bold green]\n\n"
+            f"[bold green]🎉 SİSTEM 2025 YZ MOTORİYLE OPTİMİZE EDİLDİ![/bold green]\n\n"
+            f"[cyan]Tespit edilen profil:[/] {persona} ({confidence:.0%} güven)\n\n"
             "✅ 30+ kernel parametresi uygulandı\n"
             "✅ I/O zamanlayıcıları donanıma göre ayarlandı\n"
             "✅ Ağ yığını BBR ile hızlandırıldı\n"
@@ -107,6 +130,7 @@ class FedoraOptimizer:
             border_style="green",
             title="[bold white]OPTİMİZASYON TAMAMLANDI[/]"
         ))
+
     
     # Legacy compatibility methods
     # These are kept for backward compatibility with TUI
