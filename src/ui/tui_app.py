@@ -50,7 +50,7 @@ from modules.gaming import GamingOptimizer
 from modules.logger import log_info, log_exception, get_log_path
 from modules.utils import Theme, console
 from ui.dashboard import dashboard_ui
-from ui.input_helper import KeyListener
+from ui.input_helper import KeyListener, KEY_UP, KEY_DOWN, KEY_ENTER
 
 # Global instances
 optimizer = FedoraOptimizer()
@@ -67,7 +67,8 @@ class OptimizerApp:
         self.theme = Theme()
         self.key_listener = KeyListener()
         self.layout = Layout()
-        self.message = f"[bold {Theme.PRIMARY}]KOMUT:[/] [white]1-9[/] Seçenekler - [white]0[/] Çıkış"
+        self.message = f"[bold {Theme.PRIMARY}]KOMUT:[/] [white]↑/↓[/] Seç, [white]Enter[/] Onayla"
+        self.selected_index = 0
         
         # Auto-Resize terminal
         sys.stdout.write("\x1b[8;38;120t")
@@ -110,12 +111,25 @@ class OptimizerApp:
         table.add_column("Name", width=18)
         table.add_column("Desc", style="dim")
         
+        selectable_items = [item for item in menu_items if item[0] != ""]
+        current_selection_key = selectable_items[self.selected_index][0]
+
         for key, name, desc in menu_items:
             if key == "":
                 table.add_row("", "", "")
             else:
-                style = f"bold {Theme.PRIMARY}" if key in ["3", "4"] else "white"
-                table.add_row(f"[{style}]{key}[/]", f"[{style}]{name}[/]", desc)
+                is_selected = key == current_selection_key
+                if is_selected:
+                    style = f"reverse bold {Theme.PRIMARY}"
+                    key_display = f"> {key}"
+                else:
+                    style = "white"
+                    # Keep the original bold primary for 3 and 4 if not selected
+                    if key in ["3", "4"]:
+                        style = f"bold {Theme.PRIMARY}"
+                    key_display = key
+
+                table.add_row(f"[{style}]{key_display}[/]", f"[{style}]{name}[/]", f"[{style}]{desc}[/]" if is_selected else desc)
         
         return Panel(
             Align.center(table, vertical="middle"),
@@ -324,6 +338,9 @@ class OptimizerApp:
         """Main application loop"""
         self.make_layout()
         
+        # Menu structure for navigation
+        menu_items = ["1", "2", "3", "4", "5", "6", "7", "8", "0"]
+
         try:
             with KeyListener() as listener:
                 with Live(self.layout, refresh_per_second=4, screen=True) as live:
@@ -338,7 +355,19 @@ class OptimizerApp:
                         key = listener.get_key()
                         
                         if key:
-                            if key == '0':
+                            if key == KEY_UP:
+                                self.selected_index = (self.selected_index - 1) % len(menu_items)
+                            elif key == KEY_DOWN:
+                                self.selected_index = (self.selected_index + 1) % len(menu_items)
+                            elif key == KEY_ENTER:
+                                selected_key = menu_items[self.selected_index]
+                                if selected_key == '0':
+                                    break
+                                listener.stop()
+                                self.run_task(live, selected_key)
+                                listener.start()
+
+                            elif key == '0':
                                 break
                             elif key in ['1', '2', '3', '4', '5', '6', '7', '8']:
                                 listener.stop()

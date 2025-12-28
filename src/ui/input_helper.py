@@ -4,6 +4,10 @@ import tty
 import termios
 import contextlib
 
+KEY_UP = 'KEY_UP'
+KEY_DOWN = 'KEY_DOWN'
+KEY_ENTER = 'KEY_ENTER'
+
 class KeyListener:
     def __init__(self):
         self.old_settings = None
@@ -19,7 +23,21 @@ class KeyListener:
     def get_key(self):
         # Non-blocking check
         if select.select([sys.stdin], [], [], 0)[0]:
-            return sys.stdin.read(1)
+            ch = sys.stdin.read(1)
+
+            if ch == '\x1b':
+                # Check for escape sequence (non-blocking immediate check)
+                # Typically escape sequences arrive together
+                if select.select([sys.stdin], [], [], 0.01)[0]:
+                    seq = sys.stdin.read(2)
+                    if seq == '[A': return KEY_UP
+                    if seq == '[B': return KEY_DOWN
+                return ch # Just ESC
+
+            if ch == '\n' or ch == '\r':
+                return KEY_ENTER
+
+            return ch
         return None
 
     def __enter__(self):
