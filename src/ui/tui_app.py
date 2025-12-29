@@ -339,7 +339,10 @@ class OptimizerApp:
                         
                         if key:
                             if key == '0':
-                                break
+                                live.stop()
+                                if Confirm.ask("\n[bold yellow]Çıkmak istediğinize emin misiniz?[/]"):
+                                    break
+                                live.start()
                             elif key in ['1', '2', '3', '4', '5', '6', '7', '8']:
                                 listener.stop()
                                 self.run_task(live, key)
