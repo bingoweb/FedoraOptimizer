@@ -67,7 +67,7 @@ class OptimizerApp:
         self.theme = Theme()
         self.key_listener = KeyListener()
         self.layout = Layout()
-        self.message = f"[bold {Theme.PRIMARY}]KOMUT:[/] [white]1-9[/] Seçenekler - [white]0[/] Çıkış"
+        self.message = f"[bold {Theme.PRIMARY}]KOMUT:[/] [white]1-8[/] Seçenekler - [white]0[/] Çıkış"
         
         # Auto-Resize terminal
         sys.stdout.write("\x1b[8;38;120t")
@@ -166,6 +166,15 @@ class OptimizerApp:
             padding=(0, 1)
         )
 
+    def wait_for_key(self, message="\n[bold]Devam etmek için bir tuşa basın...[/bold]"):
+        """Wait for any key press with a custom message"""
+        console.print(message)
+        with KeyListener() as listener:
+            while True:
+                if listener.get_key():
+                    break
+                time.sleep(0.05)
+
     def pause_and_run(self, live, task_func, menu_name="Unknown"):
         """Pause live display, run task with optional debug logging, resume"""
         live.stop()
@@ -200,7 +209,7 @@ class OptimizerApp:
             if DEBUG_MODE:
                 console.print(f"\n[yellow]💡 Debug console'da detayları gör (debug.log)[/yellow]")
         
-        Prompt.ask("\n[bold]Devam etmek için Enter'a basın...[/bold]")
+        self.wait_for_key()
         live.start()
 
     def run_task(self, live, key):
