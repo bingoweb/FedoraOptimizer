@@ -77,6 +77,16 @@ class OptimizerApp:
         import psutil
         psutil.cpu_percent(interval=None)
 
+    def wait_for_key(self, prompt="\n[bold]Devam etmek için herhangi bir tuşa basın...[/bold]"):
+        """Wait for any key press"""
+        self.console.print(prompt)
+        # Use a fresh listener for this blocking wait
+        with KeyListener() as listener:
+            while True:
+                if listener.get_key():
+                    break
+                time.sleep(0.05)
+
     def make_layout(self):
         """Create the main layout"""
         self.layout.split(
@@ -200,7 +210,7 @@ class OptimizerApp:
             if DEBUG_MODE:
                 console.print(f"\n[yellow]💡 Debug console'da detayları gör (debug.log)[/yellow]")
         
-        Prompt.ask("\n[bold]Devam etmek için Enter'a basın...[/bold]")
+        self.wait_for_key()
         live.start()
 
     def run_task(self, live, key):
