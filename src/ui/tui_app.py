@@ -166,6 +166,12 @@ class OptimizerApp:
             padding=(0, 1)
         )
 
+    def wait_for_key(self):
+        """Wait for any key press using KeyListener"""
+        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
+        with KeyListener():
+            sys.stdin.read(1)
+
     def pause_and_run(self, live, task_func, menu_name="Unknown"):
         """Pause live display, run task with optional debug logging, resume"""
         live.stop()
@@ -200,7 +206,7 @@ class OptimizerApp:
             if DEBUG_MODE:
                 console.print(f"\n[yellow]💡 Debug console'da detayları gör (debug.log)[/yellow]")
         
-        Prompt.ask("\n[bold]Devam etmek için Enter'a basın...[/bold]")
+        self.wait_for_key()
         live.start()
 
     def run_task(self, live, key):
