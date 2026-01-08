@@ -200,8 +200,17 @@ class OptimizerApp:
             if DEBUG_MODE:
                 console.print(f"\n[yellow]💡 Debug console'da detayları gör (debug.log)[/yellow]")
         
-        Prompt.ask("\n[bold]Devam etmek için Enter'a basın...[/bold]")
+        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
+        self.wait_for_key()
         live.start()
+
+    def wait_for_key(self):
+        """Wait for any key press"""
+        with KeyListener() as listener:
+            while True:
+                if listener.get_key():
+                    return
+                time.sleep(0.05)
 
     def run_task(self, live, key):
         """Execute optimization task based on key"""
