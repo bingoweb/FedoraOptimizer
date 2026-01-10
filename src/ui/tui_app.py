@@ -166,6 +166,19 @@ class OptimizerApp:
             padding=(0, 1)
         )
 
+    def wait_for_key(self):
+        """Waits for any key press to continue."""
+        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
+        try:
+            with KeyListener() as listener:
+                while True:
+                    if listener.get_key():
+                        break
+                    time.sleep(0.05)
+        except Exception:
+            # Fallback for non-interactive environments
+            Prompt.ask("", show_default=False, show_choices=False)
+
     def pause_and_run(self, live, task_func, menu_name="Unknown"):
         """Pause live display, run task with optional debug logging, resume"""
         live.stop()
@@ -200,7 +213,7 @@ class OptimizerApp:
             if DEBUG_MODE:
                 console.print(f"\n[yellow]💡 Debug console'da detayları gör (debug.log)[/yellow]")
         
-        Prompt.ask("\n[bold]Devam etmek için Enter'a basın...[/bold]")
+        self.wait_for_key()
         live.start()
 
     def run_task(self, live, key):
