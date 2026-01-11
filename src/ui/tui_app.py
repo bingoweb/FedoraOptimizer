@@ -212,6 +212,16 @@ class OptimizerApp:
         self.wait_for_key()
         live.start()
 
+    def wait_for_key(self):
+        """Wait for any key press"""
+        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
+        # Clear any buffered input
+        with KeyListener() as listener:
+            while True:
+                if listener.get_key():
+                    break
+                time.sleep(0.05)
+
     def run_task(self, live, key):
         """Execute optimization task based on key"""
         if key == '1':
