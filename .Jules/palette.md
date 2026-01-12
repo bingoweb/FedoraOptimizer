@@ -3,3 +3,7 @@
 ## 2024-05-22 - Initial Setup
 **Learning:** This journal tracks critical UX/accessibility learnings.
 **Action:** Consult this file before making changes.
+
+## 2025-01-12 - Duplicate TUI Methods & Prompt UX
+**Learning:** In Rich TUI apps, `Text` objects with `blink` styles provide much better visibility for "Press any key" prompts than static strings. Also, duplicate method definitions in Python classes silently overwrite each other, leading to confusing API behavior.
+**Action:** Use `rich.text.Text` for interactive prompts and ensure method uniqueness during refactoring.

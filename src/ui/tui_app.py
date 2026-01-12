@@ -166,9 +166,20 @@ class OptimizerApp:
             padding=(0, 1)
         )
 
-    def wait_for_key(self, message="\n[bold]Devam etmek için bir tuşa basın...[/bold]"):
+    def wait_for_key(self, message=None):
         """Wait for any key press with a custom message"""
-        console.print(message)
+        if message is None:
+            # Create a nice looking prompt
+            text = Text()
+            text.append("\n")
+            text.append("Devam etmek için ", style="bold white")
+            text.append("▶ ", style=f"blink {Theme.PRIMARY}")
+            text.append("bir tuşa basın...", style="bold white")
+            console.print(text)
+        else:
+            console.print(message)
+
+        # Clear any buffered input
         with KeyListener() as listener:
             while True:
                 if listener.get_key():
@@ -211,16 +222,6 @@ class OptimizerApp:
         
         self.wait_for_key()
         live.start()
-
-    def wait_for_key(self):
-        """Wait for any key press"""
-        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
-        # Clear any buffered input
-        with KeyListener() as listener:
-            while True:
-                if listener.get_key():
-                    break
-                time.sleep(0.05)
 
     def run_task(self, live, key):
         """Execute optimization task based on key"""
