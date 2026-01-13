@@ -359,7 +359,13 @@ class OptimizerApp:
                         
                         if key:
                             if key == '0':
-                                break
+                                if Confirm.ask("\n[yellow]Çıkmak istediğinize emin misiniz?[/]", default=False):
+                                    console.print("[yellow]Güle güle...[/yellow]")
+                                    break
+                                else:
+                                    # Clear the confirmation line/prompt if needed,
+                                    # or just let the loop redraw the UI.
+                                    pass
                             elif key in ['1', '2', '3', '4', '5', '6', '7', '8']:
                                 listener.stop()
                                 self.run_task(live, key)
