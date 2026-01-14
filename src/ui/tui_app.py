@@ -321,22 +321,51 @@ class OptimizerApp:
         elif key == '8':
             def show_rollback_menu():
                 tm = TransactionManager()
-                transactions = tm.get_all_transactions()
+                transactions = tm.list_transactions()
                 
                 if not transactions:
-                    console.print("[yellow]Geri alınacak işlem yok.[/yellow]")
+                    console.print()
+                    console.print(Panel(
+                        "[yellow]Geri alınacak işlem bulunamadı.[/yellow]",
+                        title="[bold white]↩️ GERİ AL[/]",
+                        border_style="yellow",
+                        box=box.ROUNDED
+                    ))
                     return
                 
-                console.print("\n[bold cyan]Geri Alınabilir İşlemler:[/]\n")
+                # Create a nice table for transactions
+                table = Table(
+                    title="[bold white]Geri Alınabilir İşlemler[/]",
+                    box=box.ROUNDED,
+                    header_style=f"bold {Theme.PRIMARY}",
+                    expand=True
+                )
+
+                table.add_column("#", style="dim", width=4, justify="center")
+                table.add_column("Zaman", style="cyan", width=12)
+                table.add_column("Kategori", style="magenta", width=15)
+                table.add_column("Açıklama", style="white")
+
                 for i, tx in enumerate(transactions, 1):
-                    console.print(f"{i}. {tx['timestamp']} - {tx['type']}")
+                    # Parse timestamp for better display
+                    ts = tx.get('timestamp', '')
+                    if 'T' in ts:
+                        ts = ts.split('T')[1][:8]  # Just HH:MM:SS
+
+                    category = tx.get('category', 'Unknown').upper()
+                    desc = tx.get('description', 'No description')
+
+                    table.add_row(str(i), ts, category, desc)
+
+                console.print()
+                console.print(table)
+                console.print()
                 
-                choice = Prompt.ask("\nİşlem no", choices=[str(i) for i in range(1, len(transactions)+1)] + ["0"])
+                choice = Prompt.ask("İşlem no (0 iptal)", choices=[str(i) for i in range(1, len(transactions)+1)] + ["0"])
                 if choice != "0":
-                    tx_id = transactions[int(choice)-1]['uuid']
-                    if Confirm.ask(f"[yellow]Bu işlemi geri almak istediğine emin misin?[/yellow]"):
-                        tm.undo_transaction(tx_id)
-                        console.print("[green]✓ İşlem geri alındı[/green]")
+                    tx_id = transactions[int(choice)-1]['id']
+                    if Confirm.ask(f"\n[yellow]Bu işlemi geri almak istediğine emin misin?[/yellow]"):
+                        tm.undo_by_id(tx_id)
             
             self.pause_and_run(live, show_rollback_menu, "8 - GERİ AL")
 
