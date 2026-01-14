@@ -7,3 +7,7 @@
 ## 2025-01-12 - Duplicate TUI Methods & Prompt UX
 **Learning:** In Rich TUI apps, `Text` objects with `blink` styles provide much better visibility for "Press any key" prompts than static strings. Also, duplicate method definitions in Python classes silently overwrite each other, leading to confusing API behavior.
 **Action:** Use `rich.text.Text` for interactive prompts and ensure method uniqueness during refactoring.
+
+## 2025-01-14 - Structured Data Presentation
+**Learning:** Presenting structured data (like transaction logs) in a `rich.table.Table` with headers vastly improves scannability compared to simple text lists. It aligns the UI with the "Deep Scan" results and reinforces the "professional tool" feel.
+**Action:** Always prefer `rich.table.Table` over formatted strings for multi-attribute lists.
