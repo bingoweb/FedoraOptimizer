@@ -267,6 +267,10 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
+### v0.4.1 (January 14, 2026)
+- Initial automated release setup
+
+
 ### v0.4.0 (December 27, 2025) - The "Intelligent Stability" Update 🌟
 - **Auto-Bootstrap**: Brand new `run.sh` that self-heals dependencies
 - **ML Debug Console**: Professional-grade error analysis
