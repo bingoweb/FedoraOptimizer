@@ -12,22 +12,30 @@ def get_current_version(content):
 
 def increment_version(version):
     parts = version.split('.')
-    if len(parts) != 3:
-        raise ValueError(f"Version {version} does not follow semver (X.Y.Z)")
 
-    major = int(parts[0])
-    minor = int(parts[1])
-    patch = int(parts[2])
+    # Handle standard SemVer (0.4.1) -> Convert to extended (0.4.1.01)
+    if len(parts) == 3:
+        major, minor, patch = map(int, parts)
+        # Start the build number
+        return f"{major}.{minor}.{patch}.01"
 
-    # Increment patch
-    patch += 1
+    # Handle extended version (0.4.1.01)
+    elif len(parts) == 4:
+        major = int(parts[0])
+        minor = int(parts[1])
+        patch = int(parts[2])
+        build = int(parts[3])
 
-    # Safety check: Never reach 1.0.0 automatically
-    if major >= 1:
-        print("Warning: Major version is already 1 or greater. Keeping as is.", file=sys.stderr)
-        return version
+        # Increment build number
+        build += 1
 
-    return f"{major}.{minor}.{patch}"
+        # Format with leading zero if less than 10
+        build_str = f"{build:02d}"
+
+        return f"{major}.{minor}.{patch}.{build_str}"
+
+    else:
+        raise ValueError(f"Version {version} format not recognized")
 
 def main():
     if not os.path.exists(VERSION_FILE):

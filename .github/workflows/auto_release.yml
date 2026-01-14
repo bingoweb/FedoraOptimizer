@@ -53,17 +53,22 @@ jobs:
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "$delimiter" >> $GITHUB_OUTPUT
 
+      - name: Update README
+        run: |
+          # Pass multiline notes carefully
+          python3 build_helpers/update_readme.py "${{ env.NEW_VERSION }}" "${{ steps.release_notes.outputs.notes }}"
+
       - name: Commit and Push Version Bump
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
 
-          git add src/ui/tui_app.py
+          git add src/ui/tui_app.py README.md
           git commit -m "chore: Bump version to ${{ env.NEW_VERSION }} [skip ci]"
 
           git tag v${{ env.NEW_VERSION }}
-          git push
-          git push --tags
+          git push origin HEAD:main
+          git push origin v${{ env.NEW_VERSION }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
