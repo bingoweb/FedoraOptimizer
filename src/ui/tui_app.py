@@ -77,6 +77,15 @@ class OptimizerApp:
         import psutil
         psutil.cpu_percent(interval=None)
 
+    def wait_for_key(self):
+        """Wait for any key press to continue"""
+        self.console.print("\n[bold yellow]Devam etmek için bir tuşa basın...[/bold yellow]")
+        with KeyListener() as listener:
+            while True:
+                if listener.get_key():
+                    break
+                time.sleep(0.05)
+
     def make_layout(self):
         """Create the main layout"""
         self.layout.split(
