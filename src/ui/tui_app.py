@@ -6,6 +6,7 @@ Streamlined TUI with optional debug console
 import sys
 import os
 import time
+from datetime import datetime, timedelta
 from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
@@ -154,7 +155,6 @@ class OptimizerApp:
 
     def get_header(self):
         """Application header"""
-        from datetime import datetime
         grid = Table.grid(expand=True)
         grid.add_column(justify="left", ratio=1)
         grid.add_column(justify="center", ratio=2)
@@ -358,13 +358,25 @@ class OptimizerApp:
                 for i, tx in enumerate(transactions, 1):
                     # Parse timestamp for better display
                     ts = tx.get('timestamp', '')
-                    if 'T' in ts:
-                        ts = ts.split('T')[1][:8]  # Just HH:MM:SS
+                    ts_display = ts
+
+                    try:
+                        dt = datetime.fromisoformat(ts)
+                        now = datetime.now()
+                        if dt.date() == now.date():
+                            ts_display = f"Bugün {dt.strftime('%H:%M')}"
+                        elif dt.date() == (now - timedelta(days=1)).date():
+                            ts_display = f"Dün {dt.strftime('%H:%M')}"
+                        else:
+                            ts_display = dt.strftime("%d.%m.%Y %H:%M")
+                    except ValueError:
+                        if 'T' in ts:
+                            ts_display = ts.split('T')[1][:8]  # Fallback to HH:MM:SS
 
                     category = tx.get('category', 'Unknown').upper()
                     desc = tx.get('description', 'No description')
 
-                    table.add_row(str(i), ts, category, desc)
+                    table.add_row(str(i), ts_display, category, desc)
 
                 console.print()
                 console.print(table)
