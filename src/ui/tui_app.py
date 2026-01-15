@@ -78,6 +78,10 @@ class OptimizerApp:
         import psutil
         psutil.cpu_percent(interval=None)
 
+    def wait_for_key(self, prompt="\n[bold]Devam etmek için herhangi bir tuşa basın...[/bold]"):
+        """Wait for any key press"""
+        self.console.print(prompt)
+        # Use a fresh listener for this blocking wait
     def wait_for_key(self):
         """Wait for any key press to continue"""
 

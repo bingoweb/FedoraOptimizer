@@ -1,3 +1,6 @@
+## 2025-05-23 - Improve "Continue" Prompt Interaction
+**Learning:** In TUI applications, requiring specific keys (like 'Enter') for navigation flow breaks the fluid experience. Users expect "any key" to continue unless confirmation is explicitly needed.
+**Action:** Replace `Prompt.ask("Press Enter...")` with a non-blocking `wait_for_key` mechanism that accepts any input, making the interaction feel snappier.
 ## 2024-05-23 - Improving TUI Continuation Prompts
 **Learning:** In TUI applications, requiring "Enter" to continue breaks the flow of keyboard-driven interfaces. Users expect "Press any key" behavior similar to `less` or `more` pagers.
 **Action:** Replace `Prompt.ask("Press Enter...")` with non-blocking key listeners that accept any input. This reduces friction and feels more native to the terminal environment.
