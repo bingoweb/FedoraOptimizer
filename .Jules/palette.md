@@ -1,3 +1,8 @@
+# Palette's Journal
+
+## 2025-05-19 - Press Any Key
+**Learning:** In a `rich`-based TUI, `Prompt.ask` forces a line-buffered input (Enter key), which interrupts the flow of quick interactions. Users prefer single-key acknowledgement ("Press any key") for informational pauses.
+**Action:** Use `tty.setcbreak` (via `KeyListener`) with `sys.stdin.read(1)` for blocking single-key waits, instead of `Prompt.ask`. Ensure the user is prompted with "Press any key" instead of "Press Enter".
 ## 2025-01-06 - Reducing Friction in TUI Flow
 **Learning:** In text-based interfaces, "Press Enter to continue" often creates unnecessary friction. Users intuitively expect "Press any key" behavior when pausing for readability.
 **Action:** When implementing pause/continue flows in TUIs, favor single-character raw input reading (any key) over line-buffered input (Enter only) to create a more fluid interaction model.
