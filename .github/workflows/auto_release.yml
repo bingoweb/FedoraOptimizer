@@ -1,0 +1,81 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    # Avoid infinite loops: Don't run if the commit is from the bot
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch all history for changelog generation
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Bump Version
+        id: version_bump
+        run: |
+          NEW_VERSION=$(python3 build_helpers/version_manager.py)
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "New version is $NEW_VERSION"
+
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          # Get the last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$LAST_TAG" ]; then
+            # No previous tags, use all history
+            echo "Generating notes from beginning..."
+            NOTES=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          else
+            echo "Generating notes since $LAST_TAG..."
+            NOTES=$(git log $LAST_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          # Handle multiline string for GITHUB_OUTPUT
+          delimiter="$(openssl rand -hex 8)"
+          echo "notes<<$delimiter" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "$delimiter" >> $GITHUB_OUTPUT
+
+      - name: Commit and Push Version Bump
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+
+          git add src/ui/tui_app.py
+          git commit -m "chore: Bump version to ${{ env.NEW_VERSION }} [skip ci]"
+
+          git tag v${{ env.NEW_VERSION }}
+          git push
+          git push --tags
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ env.NEW_VERSION }}
+          name: v${{ env.NEW_VERSION }}
+          body: |
+            ## Changes
+            ${{ steps.release_notes.outputs.notes }}
+
+            _Automated release by FedoraOptimizer Auto-Release_
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
