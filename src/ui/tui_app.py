@@ -6,6 +6,7 @@ Streamlined TUI with optional debug console
 import sys
 import os
 import time
+from datetime import datetime, timedelta
 from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
@@ -60,14 +61,14 @@ gaming_opt = GamingOptimizer(optimizer.hw)
 class OptimizerApp:
     """Streamlined Optimization-Only TUI Application"""
     
-    VERSION = "0.4.0"
+    VERSION = "0.4.9"
     
     def __init__(self):
         self.console = Console()
         self.theme = Theme()
         self.key_listener = KeyListener()
         self.layout = Layout()
-        self.message = f"[bold {Theme.PRIMARY}]KOMUT:[/] [white]1-9[/] Seçenekler - [white]0[/] Çıkış"
+        self.message = f"[bold {Theme.PRIMARY}]KOMUT:[/] [white]1-8[/] Seçenekler - [white]0[/] Çıkış"
         
         # Auto-Resize terminal
         sys.stdout.write("\x1b[8;38;120t")
@@ -81,6 +82,24 @@ class OptimizerApp:
         """Wait for any key press"""
         self.console.print(prompt)
         # Use a fresh listener for this blocking wait
+    def wait_for_key(self):
+        """Wait for any key press to continue"""
+
+        console.print(Align.center("\n[bold blink]Devam etmek için herhangi bir tuşa basın...[/bold blink]"))
+
+        # Flush input buffer to prevent accidental skips
+        try:
+            import termios
+            termios.tcflush(sys.stdin, termios.TCIOFLUSH)
+        except:
+            pass
+
+        console.print("\n[bold]Devam etmek için herhangi bir tuşa basın...[/bold]")
+        with KeyListener() as listener:
+            while True:
+                if listener.get_key():
+                    return
+        self.console.print("\n[bold yellow]Devam etmek için bir tuşa basın...[/bold yellow]")
         with KeyListener() as listener:
             while True:
                 if listener.get_key():
@@ -155,7 +174,6 @@ class OptimizerApp:
 
     def get_header(self):
         """Application header"""
-        from datetime import datetime
         grid = Table.grid(expand=True)
         grid.add_column(justify="left", ratio=1)
         grid.add_column(justify="center", ratio=2)
@@ -175,6 +193,38 @@ class OptimizerApp:
             box=box.ROUNDED,
             padding=(0, 1)
         )
+
+    def wait_for_key(self):
+        """Waits for any key press to continue."""
+        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
+        try:
+            with KeyListener() as listener:
+                while True:
+                    if listener.get_key():
+                        break
+                    time.sleep(0.05)
+        except Exception:
+            # Fallback for non-interactive environments
+            Prompt.ask("", show_default=False, show_choices=False)
+    def wait_for_key(self, message=None):
+        """Wait for any key press with a custom message"""
+        if message is None:
+            # Create a nice looking prompt
+            text = Text()
+            text.append("\n")
+            text.append("Devam etmek için ", style="bold white")
+            text.append("▶ ", style=f"blink {Theme.PRIMARY}")
+            text.append("bir tuşa basın...", style="bold white")
+            console.print(text)
+        else:
+            console.print(message)
+
+        # Clear any buffered input
+        with KeyListener() as listener:
+            while True:
+                if listener.get_key():
+                    break
+                time.sleep(0.05)
 
     def pause_and_run(self, live, task_func, menu_name="Unknown"):
         """Pause live display, run task with optional debug logging, resume"""
@@ -210,8 +260,17 @@ class OptimizerApp:
             if DEBUG_MODE:
                 console.print(f"\n[yellow]💡 Debug console'da detayları gör (debug.log)[/yellow]")
         
+        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
         self.wait_for_key()
         live.start()
+
+    def wait_for_key(self):
+        """Wait for any key press"""
+        with KeyListener() as listener:
+            while True:
+                if listener.get_key():
+                    return
+                time.sleep(0.05)
 
     def run_task(self, live, key):
         """Execute optimization task based on key"""
@@ -311,22 +370,63 @@ class OptimizerApp:
         elif key == '8':
             def show_rollback_menu():
                 tm = TransactionManager()
-                transactions = tm.get_all_transactions()
+                transactions = tm.list_transactions()
                 
                 if not transactions:
-                    console.print("[yellow]Geri alınacak işlem yok.[/yellow]")
+                    console.print()
+                    console.print(Panel(
+                        "[yellow]Geri alınacak işlem bulunamadı.[/yellow]",
+                        title="[bold white]↩️ GERİ AL[/]",
+                        border_style="yellow",
+                        box=box.ROUNDED
+                    ))
                     return
                 
-                console.print("\n[bold cyan]Geri Alınabilir İşlemler:[/]\n")
+                # Create a nice table for transactions
+                table = Table(
+                    title="[bold white]Geri Alınabilir İşlemler[/]",
+                    box=box.ROUNDED,
+                    header_style=f"bold {Theme.PRIMARY}",
+                    expand=True
+                )
+
+                table.add_column("#", style="dim", width=4, justify="center")
+                table.add_column("Zaman", style="cyan", width=12)
+                table.add_column("Kategori", style="magenta", width=15)
+                table.add_column("Açıklama", style="white")
+
                 for i, tx in enumerate(transactions, 1):
-                    console.print(f"{i}. {tx['timestamp']} - {tx['type']}")
+                    # Parse timestamp for better display
+                    ts = tx.get('timestamp', '')
+                    ts_display = ts
+
+                    try:
+                        dt = datetime.fromisoformat(ts)
+                        now = datetime.now()
+                        if dt.date() == now.date():
+                            ts_display = f"Bugün {dt.strftime('%H:%M')}"
+                        elif dt.date() == (now - timedelta(days=1)).date():
+                            ts_display = f"Dün {dt.strftime('%H:%M')}"
+                        else:
+                            ts_display = dt.strftime("%d.%m.%Y %H:%M")
+                    except ValueError:
+                        if 'T' in ts:
+                            ts_display = ts.split('T')[1][:8]  # Fallback to HH:MM:SS
+
+                    category = tx.get('category', 'Unknown').upper()
+                    desc = tx.get('description', 'No description')
+
+                    table.add_row(str(i), ts_display, category, desc)
+
+                console.print()
+                console.print(table)
+                console.print()
                 
-                choice = Prompt.ask("\nİşlem no", choices=[str(i) for i in range(1, len(transactions)+1)] + ["0"])
+                choice = Prompt.ask("İşlem no (0 iptal)", choices=[str(i) for i in range(1, len(transactions)+1)] + ["0"])
                 if choice != "0":
-                    tx_id = transactions[int(choice)-1]['uuid']
-                    if Confirm.ask(f"[yellow]Bu işlemi geri almak istediğine emin misin?[/yellow]"):
-                        tm.undo_transaction(tx_id)
-                        console.print("[green]✓ İşlem geri alındı[/green]")
+                    tx_id = transactions[int(choice)-1]['id']
+                    if Confirm.ask(f"\n[yellow]Bu işlemi geri almak istediğine emin misin?[/yellow]"):
+                        tm.undo_by_id(tx_id)
             
             self.pause_and_run(live, show_rollback_menu, "8 - GERİ AL")
 
@@ -349,7 +449,13 @@ class OptimizerApp:
                         
                         if key:
                             if key == '0':
-                                break
+                                if Confirm.ask("\n[yellow]Çıkmak istediğinize emin misiniz?[/]", default=False):
+                                    console.print("[yellow]Güle güle...[/yellow]")
+                                    break
+                                else:
+                                    # Clear the confirmation line/prompt if needed,
+                                    # or just let the loop redraw the UI.
+                                    pass
                             elif key in ['1', '2', '3', '4', '5', '6', '7', '8']:
                                 listener.stop()
                                 self.run_task(live, key)

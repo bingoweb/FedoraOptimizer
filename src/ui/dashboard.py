@@ -43,14 +43,31 @@ class Dashboard:
                          break
         except: cpu_name = "Bilinmiyor"
 
+        # Cleanup CPU name
+        cpu_clean = cpu_name.replace("Intel(R)", "").replace("Core(TM)", "")
+        cpu_clean = cpu_clean.replace("AMD", "").replace("Processor", "").replace("CPU", "").replace("@", "")
+        cpu_clean = " ".join(cpu_clean.split())
+
+        # Better kernel version (Major.Minor)
+        k_parts = kernel.split('.')
+        k_ver = f"{k_parts[0]}.{k_parts[1]}" if len(k_parts) >= 2 else kernel
+
         grid = Table.grid(expand=True, padding=(0,1))
         grid.add_column(style=f"bold {Theme.PRIMARY}")
         grid.add_column(style="white")
         
         grid.add_row("CİHAZ:", hostname)
         grid.add_row("OS:", distro)
-        grid.add_row("KERNEL:", kernel.split('.')[0] + "...") # Shorten
-        grid.add_row("CPU:", cpu_name[:25] + "...")
+        # UX: Show at least Major.Minor (e.g., 6.12) instead of just Major (6...)
+        k_parts = kernel.split('.')
+        k_ver = f"{k_parts[0]}.{k_parts[1]}" if len(k_parts) >= 2 else kernel
+        grid.add_row("KERNEL:", k_ver)
+
+        # UX: Clean up CPU name (remove noise)
+        cpu_clean = cpu_name.replace("Intel(R) Core(TM) ", "").replace("Processor", "").strip()
+        grid.add_row("CPU:", cpu_clean[:25] + ("..." if len(cpu_clean) > 25 else ""))
+        grid.add_row("KERNEL:", k_ver)
+        grid.add_row("CPU:", cpu_clean[:22] + "..." if len(cpu_clean) > 25 else cpu_clean)
         grid.add_row("MİMARİ:", uname.machine)
 
         return Panel(
