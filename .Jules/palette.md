@@ -1,3 +1,6 @@
+## 2025-05-18 - Press Any Key
+**Learning:** In TUI apps, replacing "Press Enter to continue" with "Press any key" significantly reduces friction for repetitive tasks.
+**Action:** Use `wait_for_key` with a polling loop and `KeyListener` instead of `Prompt.ask` for non-decision pauses.
 ## 2025-01-09 - [Fluid Navigation: Press Any Key]
 **Learning:** Users prefer fluid navigation ("Press any key") over rigid interactions ("Press Enter") in TUI applications, especially for simple acknowledgments like continuing after a task.
 **Action:** Implement `wait_for_key` utility using `KeyListener` or `tty/termios` for non-critical confirmations, replacing `Prompt.ask` where appropriate.
