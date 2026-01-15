@@ -80,6 +80,16 @@ class OptimizerApp:
 
     def wait_for_key(self):
         """Wait for any key press to continue"""
+
+        console.print(Align.center("\n[bold blink]Devam etmek için herhangi bir tuşa basın...[/bold blink]"))
+
+        # Flush input buffer to prevent accidental skips
+        try:
+            import termios
+            termios.tcflush(sys.stdin, termios.TCIOFLUSH)
+        except:
+            pass
+
         console.print("\n[bold]Devam etmek için herhangi bir tuşa basın...[/bold]")
         with KeyListener() as listener:
             while True:
