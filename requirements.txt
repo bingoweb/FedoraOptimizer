@@ -1,2 +1,5 @@
 rich
 psutil
+scikit-learn
+numpy
+joblib

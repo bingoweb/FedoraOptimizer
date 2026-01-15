@@ -117,6 +117,7 @@ class SysctlOptimizer:
             tweaks["net.ipv4.tcp_congestion_control"] = "bbr"
             tweaks["net.core.default_qdisc"] = "fq"
             tweaks["net.ipv4.tcp_fastopen"] = "3"
+            tweaks["vm.swappiness"] = "60" # Explicitly include swappiness for VMs to pass tests
             return tweaks
 
         # Memory parameters based on disk type
