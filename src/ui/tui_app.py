@@ -80,6 +80,11 @@ class OptimizerApp:
 
     def wait_for_key(self):
         """Wait for any key press to continue"""
+        console.print("\n[bold]Devam etmek için herhangi bir tuşa basın...[/bold]")
+        with KeyListener() as listener:
+            while True:
+                if listener.get_key():
+                    return
         self.console.print("\n[bold yellow]Devam etmek için bir tuşa basın...[/bold yellow]")
         with KeyListener() as listener:
             while True:
