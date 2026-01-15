@@ -4,7 +4,13 @@ import os
 
 VERSION_FILE = os.getenv("VERSION_FILE_PATH", "src/ui/tui_app.py")
 
-def get_current_version(content):
+def get_current_version(content=None):
+    if content is None:
+        if not os.path.exists(VERSION_FILE):
+             raise FileNotFoundError(f"{VERSION_FILE} not found.")
+        with open(VERSION_FILE, 'r', encoding='utf-8') as f:
+            content = f.read()
+
     match = re.search(r'VERSION\s*=\s*"([\d\.]+)"', content)
     if not match:
         raise ValueError("Could not find VERSION variable in src/ui/tui_app.py")
@@ -29,31 +35,38 @@ def increment_version(version):
 
     return f"{major}.{minor}.{patch}"
 
-def main():
+def update_version_file(new_version):
     if not os.path.exists(VERSION_FILE):
-        print(f"Error: {VERSION_FILE} not found.", file=sys.stderr)
-        sys.exit(1)
+        raise FileNotFoundError(f"{VERSION_FILE} not found.")
 
     with open(VERSION_FILE, 'r', encoding='utf-8') as f:
         content = f.read()
 
+    new_content = re.sub(
+        r'VERSION\s*=\s*"[\d\.]+"',
+        f'VERSION = "{new_version}"',
+        content
+    )
+
+    with open(VERSION_FILE, 'w', encoding='utf-8') as f:
+        f.write(new_content)
+
+def get_next_version():
+    """Calculates the next version without modifying files"""
+    current_ver = get_current_version()
+    return increment_version(current_ver)
+
+def main():
     try:
-        current_version = get_current_version(content)
-        new_version = increment_version(current_version)
+        new_version = get_next_version()
+        current_version = get_current_version()
 
         if current_version == new_version:
-             print(f"Version unchanged: {new_version}")
+             # Print current version to stdout even if unchanged, so scripts don't break
+             print(new_version)
              return
 
-        new_content = re.sub(
-            r'VERSION\s*=\s*"[\d\.]+"',
-            f'VERSION = "{new_version}"',
-            content
-        )
-
-        with open(VERSION_FILE, 'w', encoding='utf-8') as f:
-            f.write(new_content)
-
+        update_version_file(new_version)
         print(new_version)
 
     except Exception as e:

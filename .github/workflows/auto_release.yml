@@ -25,56 +25,44 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Bump Version
-        id: version_bump
+      - name: Calculate Next Version
+        id: calc_version
         run: |
+          # Use the version manager to get what the next version WILL be
+          # but don't modify files yet (it modifies files if we run it as main, so we capture output)
           NEW_VERSION=$(python3 build_helpers/version_manager.py)
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "New version is $NEW_VERSION"
+          echo "Next version is $NEW_VERSION"
 
-      - name: Generate Release Notes
-        id: release_notes
+      - name: Generate Changelog & Update Docs
+        id: docs
         run: |
-          # Get the last tag
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          # Update CHANGELOG.md and generate release_body.md
+          python3 build_helpers/changelog_generator.py ${{ env.NEW_VERSION }}
 
-          if [ -z "$LAST_TAG" ]; then
-            # No previous tags, use all history
-            echo "Generating notes from beginning..."
-            NOTES=$(git log --pretty=format:"- %s (%h)" --no-merges)
-          else
-            echo "Generating notes since $LAST_TAG..."
-            NOTES=$(git log $LAST_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
-          fi
+          # Update README.md
+          python3 build_helpers/readme_updater.py ${{ env.NEW_VERSION }}
 
-          # Handle multiline string for GITHUB_OUTPUT
-          delimiter="$(openssl rand -hex 8)"
-          echo "notes<<$delimiter" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "$delimiter" >> $GITHUB_OUTPUT
-
-      - name: Commit and Push Version Bump
+      - name: Commit and Push Changes
         run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
+          git config --global user.name "FedoraOptimizer Bot"
+          git config --global user.email "bot@fedoraoptimizer.com"
 
-          git add src/ui/tui_app.py
-          git commit -m "chore: Bump version to ${{ env.NEW_VERSION }} [skip ci]"
+          # Add all modified files
+          git add src/ui/tui_app.py CHANGELOG.md README.md
+
+          git commit -m "chore: Release v${{ env.NEW_VERSION }} [skip ci]"
 
           git tag v${{ env.NEW_VERSION }}
-          git push
-          git push --tags
+          git push origin main
+          git push origin v${{ env.NEW_VERSION }}
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ env.NEW_VERSION }}
           name: v${{ env.NEW_VERSION }}
-          body: |
-            ## Changes
-            ${{ steps.release_notes.outputs.notes }}
-
-            _Automated release by FedoraOptimizer Auto-Release_
+          body_path: release_body.md
           draft: false
           prerelease: false
         env:
