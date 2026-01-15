@@ -175,6 +175,18 @@ class OptimizerApp:
             padding=(0, 1)
         )
 
+    def wait_for_key(self):
+        """Waits for any key press to continue."""
+        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
+        try:
+            with KeyListener() as listener:
+                while True:
+                    if listener.get_key():
+                        break
+                    time.sleep(0.05)
+        except Exception:
+            # Fallback for non-interactive environments
+            Prompt.ask("", show_default=False, show_choices=False)
     def wait_for_key(self, message=None):
         """Wait for any key press with a custom message"""
         if message is None:
