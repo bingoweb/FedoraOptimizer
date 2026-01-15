@@ -61,7 +61,7 @@ gaming_opt = GamingOptimizer(optimizer.hw)
 class OptimizerApp:
     """Streamlined Optimization-Only TUI Application"""
     
-    VERSION = "0.4.11"
+    VERSION = "0.4.12"
     
     def __init__(self):
         self.console = Console()
