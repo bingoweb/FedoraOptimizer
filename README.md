@@ -267,11 +267,15 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
-### v0.4.15 (January 15, 2026) 🌟
-- Automate release workflow with changelog and readme updates
+### v0.4.16 (January 16, 2026) 🌟
+- Unify 'Press Any Key' prompt behavior
 
 <details>
 <summary>View Older Updates (v0.3.x)</summary>
+
+### v0.4.15 (January 15, 2026) 🌟
+- Automate release workflow with changelog and readme updates
+
 
 ### v0.4.0 (December 27, 2025) - The "Intelligent Stability" Update 🌟
 - **Auto-Bootstrap**: Brand new `run.sh` that self-heals dependencies
