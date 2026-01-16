@@ -78,35 +78,36 @@ class OptimizerApp:
         import psutil
         psutil.cpu_percent(interval=None)
 
-    def wait_for_key(self):
-        """Wait for any key press to continue"""
-    def wait_for_key(self, prompt="\n[bold]Devam etmek için herhangi bir tuşa basın...[/bold]"):
-        """Wait for any key press"""
-        self.console.print(prompt)
-        # Use a fresh listener for this blocking wait
-    def wait_for_key(self):
-        """Wait for any key press to continue"""
+    def wait_for_key(self, message=None):
+        """Wait for any key press with a custom message"""
+        if message is None:
+            # Create a nice looking prompt
+            text = Text()
+            text.append("\n")
+            text.append("Devam etmek için ", style="bold white")
+            text.append("▶ ", style=f"blink {Theme.PRIMARY}")
+            text.append("bir tuşa basın...", style="bold white")
+            console.print(text)
+        else:
+            console.print(message)
 
-        console.print(Align.center("\n[bold blink]Devam etmek için herhangi bir tuşa basın...[/bold blink]"))
-
-        # Flush input buffer to prevent accidental skips
+        # Clear any buffered input
         try:
             import termios
             termios.tcflush(sys.stdin, termios.TCIOFLUSH)
         except:
             pass
 
-        console.print("\n[bold]Devam etmek için herhangi bir tuşa basın...[/bold]")
-        with KeyListener() as listener:
-            while True:
-                if listener.get_key():
-                    return
-        self.console.print("\n[bold yellow]Devam etmek için bir tuşa basın...[/bold yellow]")
-        with KeyListener() as listener:
-            while True:
-                if listener.get_key():
-                    break
-                time.sleep(0.05)
+        # Use KeyListener for robust handling
+        try:
+            with KeyListener() as listener:
+                while True:
+                    if listener.get_key():
+                        break
+                    time.sleep(0.05)
+        except Exception:
+             # Fallback for non-interactive environments
+            Prompt.ask("", show_default=False, show_choices=False)
 
     def make_layout(self):
         """Create the main layout"""
@@ -196,42 +197,6 @@ class OptimizerApp:
             padding=(0, 1)
         )
 
-    def wait_for_key(self):
-        """Wait for any key press using KeyListener"""
-        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
-        with KeyListener():
-            sys.stdin.read(1)
-        """Waits for any key press to continue."""
-        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
-        try:
-            with KeyListener() as listener:
-                while True:
-                    if listener.get_key():
-                        break
-                    time.sleep(0.05)
-        except Exception:
-            # Fallback for non-interactive environments
-            Prompt.ask("", show_default=False, show_choices=False)
-    def wait_for_key(self, message=None):
-        """Wait for any key press with a custom message"""
-        if message is None:
-            # Create a nice looking prompt
-            text = Text()
-            text.append("\n")
-            text.append("Devam etmek için ", style="bold white")
-            text.append("▶ ", style=f"blink {Theme.PRIMARY}")
-            text.append("bir tuşa basın...", style="bold white")
-            console.print(text)
-        else:
-            console.print(message)
-
-        # Clear any buffered input
-        with KeyListener() as listener:
-            while True:
-                if listener.get_key():
-                    break
-                time.sleep(0.05)
-
     def pause_and_run(self, live, task_func, menu_name="Unknown"):
         """Pause live display, run task with optional debug logging, resume"""
         live.stop()
@@ -269,20 +234,6 @@ class OptimizerApp:
         console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
         self.wait_for_key()
         live.start()
-
-    def wait_for_key(self):
-        """Waits for any key press to continue"""
-        self.console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
-        with KeyListener() as listener:
-            while True:
-                if listener.get_key():
-                    break
-        """Wait for any key press"""
-        with KeyListener() as listener:
-            while True:
-                if listener.get_key():
-                    return
-                time.sleep(0.05)
 
     def run_task(self, live, key):
         """Execute optimization task based on key"""
