@@ -1,74 +1,88 @@
-from rich.layout import Layout
-from rich.panel import Panel
-from rich.console import Console
-from rich.text import Text
-from rich.table import Table
-from rich import box
-from datetime import datetime
-import psutil
-import platform
+"""
+Dashboard UI module for Fedora Optimizer.
+"""
 import socket
-import os
+import platform
+from datetime import datetime
+
+import psutil
+from rich import box
+from rich.align import Align
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from modules.utils import Theme
-from rich.align import Align
+
 
 class Dashboard:
+    """
+    Dashboard class to render system statistics and information.
+    """
     def __init__(self):
         # Network speed tracking
         self.last_net_io = psutil.net_io_counters()
         self.last_time = datetime.now()
 
     def get_color(self, val, safe, warn):
-        if val < safe: return Theme.SUCCESS 
-        if val < warn: return Theme.WARNING
+        """Returns color based on value thresholds."""
+        if val < safe:
+            return Theme.SUCCESS
+        if val < warn:
+            return Theme.WARNING
         return Theme.ERROR
 
     def make_bar(self, percent, color, width=15):
+        """Creates a text-based progress bar."""
         # Smoother, more professional bar
         filled = int(percent / 100 * width)
         return f"[{color}]{'━'*filled}[/][dim white]{'┄'*(width-filled)}[/]"
 
     def get_device_info(self):
+        """Renders device information panel."""
         uname = platform.uname()
         hostname = socket.gethostname()
-        distro = "Fedora Linux 43" 
+        distro = "Fedora Linux 43"
         kernel = uname.release
-        
+
         try:
-             with open("/proc/cpuinfo", "r") as f:
-                 for line in f:
-                     if "model name" in line:
-                         cpu_name = line.split(":")[1].strip()
-                         break
-        except: cpu_name = "Bilinmiyor"
+            with open("/proc/cpuinfo", "r", encoding="utf-8") as f:
+                for line in f:
+                    if "model name" in line:
+                        cpu_name = line.split(":")[1].strip()
+                        break
+        except Exception: # pylint: disable=broad-except
+            cpu_name = "Bilinmiyor"
 
         # Cleanup CPU name
         cpu_clean = cpu_name.replace("Intel(R)", "").replace("Core(TM)", "")
-        cpu_clean = cpu_clean.replace("AMD", "").replace("Processor", "").replace("CPU", "").replace("@", "")
+        cpu_clean = cpu_clean.replace("AMD", "").replace("Processor", "").replace(
+            "CPU", "").replace("@", "")
         cpu_clean = " ".join(cpu_clean.split())
 
         # Better kernel version (Major.Minor)
         k_parts = kernel.split('.')
         k_ver = f"{k_parts[0]}.{k_parts[1]}" if len(k_parts) >= 2 else kernel
 
-        grid = Table.grid(expand=True, padding=(0,1))
+        # Uptime
+        try:
+            boot_time = datetime.fromtimestamp(psutil.boot_time())
+            uptime = datetime.now() - boot_time
+            uptime_str = str(uptime).split('.', maxsplit=1)[0].replace(
+                "days", "gün").replace("day", "gün")
+        except Exception: # pylint: disable=broad-except
+            uptime_str = "?"
+
+        grid = Table.grid(expand=True, padding=(0, 1))
         grid.add_column(style=f"bold {Theme.PRIMARY}")
         grid.add_column(style="white")
-        
+
         grid.add_row("CİHAZ:", hostname)
         grid.add_row("OS:", distro)
-        # UX: Show at least Major.Minor (e.g., 6.12) instead of just Major (6...)
-        k_parts = kernel.split('.')
-        k_ver = f"{k_parts[0]}.{k_parts[1]}" if len(k_parts) >= 2 else kernel
         grid.add_row("KERNEL:", k_ver)
-
-        # UX: Clean up CPU name (remove noise)
-        cpu_clean = cpu_name.replace("Intel(R) Core(TM) ", "").replace("Processor", "").strip()
         grid.add_row("CPU:", cpu_clean[:25] + ("..." if len(cpu_clean) > 25 else ""))
-        grid.add_row("KERNEL:", k_ver)
-        grid.add_row("CPU:", cpu_clean[:22] + "..." if len(cpu_clean) > 25 else cpu_clean)
         grid.add_row("MİMARİ:", uname.machine)
+        grid.add_row("SÜRE:", uptime_str)
 
         return Panel(
             Align.center(grid, vertical="middle"),
@@ -79,22 +93,23 @@ class Dashboard:
         )
 
     def get_system_overview(self):
+        """Renders system resource overview panel."""
         cpu_p = psutil.cpu_percent()
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
-        
-        grid = Table.grid(expand=True, padding=(0,2))
+
+        grid = Table.grid(expand=True, padding=(0, 2))
         grid.add_column("Icon", width=3)
         grid.add_column("Name", style="bold white", width=6)
         grid.add_column("Val", justify="right", style=Theme.PRIMARY, width=6)
         grid.add_column("Bar", justify="right", ratio=1)
-        
+
         c_col = self.get_color(cpu_p, 50, 80)
         grid.add_row("⚡", "CPU", f"{cpu_p}%", self.make_bar(cpu_p, c_col))
-        
+
         m_col = self.get_color(mem.percent, 60, 85)
         grid.add_row("🧠", "RAM", f"{mem.percent}%", self.make_bar(mem.percent, m_col))
-        
+
         swap = psutil.swap_memory()
         s_col = self.get_color(swap.percent, 50, 80)
         grid.add_row("🔋", "SWP", f"{swap.percent}%", self.make_bar(swap.percent, s_col))
@@ -111,29 +126,37 @@ class Dashboard:
         )
 
     def get_process_panel(self):
+        """Renders active processes panel."""
         procs = []
         for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
             try:
                 p.info['name'] = p.info['name'][:15]
                 procs.append(p.info)
-            except: pass
-            
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+
         top_cpu = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:5]
-        
-        table = Table(box=None, expand=True, padding=(0,1), show_header=True, header_style=f"bold {Theme.PRIMARY}")
+
+        table = Table(
+            box=None,
+            expand=True,
+            padding=(0, 1),
+            show_header=True,
+            header_style=f"bold {Theme.PRIMARY}"
+        )
         table.add_column("PID", style="dim white", width=6)
         table.add_column("İŞLEM", style="white")
         table.add_column("CPU", justify="right", style=Theme.SUCCESS)
         table.add_column("RAM", justify="right", style="cyan")
-        
+
         for p in top_cpu:
             table.add_row(
                 str(p['pid']),
-                p['name'].title(), # Title case looks better than UPPER
+                p['name'].title(),  # Title case looks better than UPPER
                 f"{p['cpu_percent']:.1f}%",
                 f"{p['memory_percent']:.1f}%"
             )
-            
+
         return Panel(
             table,
             title=f"[bold {Theme.TEXT}] EN AKTİF İŞLEMLER [/]",
@@ -143,32 +166,36 @@ class Dashboard:
         )
 
     def get_network_panel(self):
+        """Renders network status panel."""
         now = datetime.now()
         cur_net = psutil.net_io_counters()
         dt = (now - self.last_time).total_seconds()
-        if dt == 0: dt = 1
-        
+        if dt == 0:
+            dt = 1
+
         up_speed = (cur_net.bytes_sent - self.last_net_io.bytes_sent) / dt
         down_speed = (cur_net.bytes_recv - self.last_net_io.bytes_recv) / dt
-        
+
         self.last_net_io = cur_net
         self.last_time = now
-        
+
         def fmt(s):
-            if s > 1024**2: return f"{s/1024**2:.1f} MB/s"
-            if s > 1024: return f"{s/1024:.1f} KB/s"
+            if s > 1024**2:
+                return f"{s/1024**2:.1f} MB/s"
+            if s > 1024:
+                return f"{s/1024:.1f} KB/s"
             return f"{s:.0f} B/s"
 
-        grid = Table.grid(expand=True, padding=(0,1))
+        grid = Table.grid(expand=True, padding=(0, 1))
         grid.add_column(style="bold white")
         grid.add_column(justify="right", style=Theme.PRIMARY)
-        
+
         grid.add_row("İNDİRME:", fmt(down_speed))
         grid.add_row("YÜKLEME:", fmt(up_speed))
         grid.add_row("", "")
         grid.add_row("[dim]TOPLAM İNEN:[/dim]", str(cur_net.bytes_recv // 1024**2) + " MB")
         grid.add_row("[dim]TOPLAM GİDEN:[/dim]", str(cur_net.bytes_sent // 1024**2) + " MB")
-        
+
         return Panel(
             Align.center(grid, vertical="middle"),
             title=f"[bold {Theme.TEXT}] AĞ DURUMU [/]",
@@ -178,21 +205,25 @@ class Dashboard:
         )
 
     def get_header(self):
+        """Renders the main dashboard header."""
         grid = Table.grid(expand=True)
         grid.add_column(justify="left", ratio=1)
         grid.add_column(justify="right")
         grid.add_row(
-            f"[bold {Theme.PRIMARY}]FEDORA[/] [bold white]OPTİMİZER[/] [dim white]///[/] [bold {Theme.SUCCESS}] 2025 AI [/]",
+            f"[bold {Theme.PRIMARY}]FEDORA[/] [bold white]OPTİMİZER[/] "
+            f"[dim white]///[/] [bold {Theme.SUCCESS}] 2025 AI [/]",
             datetime.now().strftime("%H:%M")
         )
         return Panel(grid, style=f"{Theme.PRIMARY} on #1e1e1e", box=box.ROUNDED)
 
     def get_footer(self, message="Hazır"):
+        """Renders the dashboard footer."""
         return Panel(
             Text.from_markup(f"{message}"),
             border_style=Theme.BORDER,
             box=box.ROUNDED,
-            padding=(0,1)
+            padding=(0, 1)
         )
+
 
 dashboard_ui = Dashboard()
