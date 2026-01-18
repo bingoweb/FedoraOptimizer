@@ -31,3 +31,7 @@
 ## 2025-01-14 - Structured Data Presentation
 **Learning:** Presenting structured data (like transaction logs) in a `rich.table.Table` with headers vastly improves scannability compared to simple text lists. It aligns the UI with the "Deep Scan" results and reinforces the "professional tool" feel.
 **Action:** Always prefer `rich.table.Table` over formatted strings for multi-attribute lists.
+
+## 2025-05-24 - Hardware Name Noise
+**Learning:** Raw hardware names (like "Intel(R) Core(TM) i7-12700K Processor") contain significant noise ("(R)", "(TM)", "Processor") that clutter dashboard UIs. Aggressive cleaning is necessary for clean TUI layouts.
+**Action:** Implement a centralized string cleaner for hardware names to ensure consistency and readability across panels.
