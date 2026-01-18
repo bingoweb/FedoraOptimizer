@@ -267,11 +267,15 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
-### v0.4.17 (January 18, 2026) 🌟
-- Fix dashboard duplicates and add uptime
+### v0.4.18 (January 18, 2026) 🌟
+- Fix duplicate dashboard rows and add system uptime
 
 <details>
 <summary>View Older Updates (v0.3.x)</summary>
+
+### v0.4.17 (January 18, 2026) 🌟
+- Fix dashboard duplicates and add uptime
+
 
 ### v0.4.16 (January 16, 2026) 🌟
 - Unify 'Press Any Key' prompt behavior

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.18] - 2026-01-18
+
+### Improvements 🔧
+- Fix duplicate dashboard rows and add system uptime
+
+
+
 ## [0.4.17] - 2026-01-18
 
 ### New Features 🚀
