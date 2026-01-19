@@ -35,3 +35,7 @@
 ## 2025-05-24 - Hardware Name Noise
 **Learning:** Raw hardware names (like "Intel(R) Core(TM) i7-12700K Processor") contain significant noise ("(R)", "(TM)", "Processor") that clutter dashboard UIs. Aggressive cleaning is necessary for clean TUI layouts.
 **Action:** Implement a centralized string cleaner for hardware names to ensure consistency and readability across panels.
+
+## 2025-05-24 - Double Prompt Anti-Pattern
+**Learning:** When using a dedicated method for user input (like `wait_for_key`), avoid printing a prompt message immediately before calling it if the method itself handles the prompt display. This redundancy creates a jarring "double prompt" effect.
+**Action:** Rely on the default message handling within input utility methods to ensure a single, consistent prompt style.

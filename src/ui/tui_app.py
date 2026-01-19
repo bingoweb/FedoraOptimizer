@@ -231,7 +231,6 @@ class OptimizerApp:
             if DEBUG_MODE:
                 console.print(f"\n[yellow]💡 Debug console'da detayları gör (debug.log)[/yellow]")
         
-        console.print("\n[bold]Devam etmek için bir tuşa basın...[/bold]")
         self.wait_for_key()
         live.start()
 

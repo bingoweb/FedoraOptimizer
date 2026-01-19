@@ -64,12 +64,20 @@ class Dashboard:
         k_parts = kernel.split('.')
         k_ver = f"{k_parts[0]}.{k_parts[1]}" if len(k_parts) >= 2 else kernel
 
-        # Uptime
+        # Calculate Uptime
         try:
             boot_time = datetime.fromtimestamp(psutil.boot_time())
-            uptime = datetime.now() - boot_time
-            uptime_str = str(uptime).split('.', maxsplit=1)[0].replace(
-                "days", "gün").replace("day", "gün")
+            now = datetime.now()
+            uptime = now - boot_time
+            days = uptime.days
+            hours, remainder = divmod(uptime.seconds, 3600)
+            minutes, _ = divmod(remainder, 60)
+
+            uptime_str = ""
+            if days > 0: uptime_str += f"{days}g "
+            if hours > 0: uptime_str += f"{hours}s "
+            uptime_str += f"{minutes}dk"
+            uptime_str = uptime_str.strip()
         except Exception: # pylint: disable=broad-except
             uptime_str = "?"
 
@@ -80,29 +88,9 @@ class Dashboard:
         grid.add_row("CİHAZ:", hostname)
         grid.add_row("OS:", distro)
         grid.add_row("KERNEL:", k_ver)
-
-        # UX: Clean up CPU name (remove noise)
-        cpu_clean = cpu_name.replace("Intel(R) Core(TM) ", "").replace("Processor", "").strip()
-
-        # Calculate Uptime
-        boot_time = datetime.fromtimestamp(psutil.boot_time())
-        now = datetime.now()
-        uptime = now - boot_time
-        days = uptime.days
-        hours, remainder = divmod(uptime.seconds, 3600)
-        minutes, _ = divmod(remainder, 60)
-
-        uptime_str = ""
-        if days > 0: uptime_str += f"{days}g "
-        if hours > 0: uptime_str += f"{hours}s "
-        uptime_str += f"{minutes}dk"
-
         grid.add_row("CPU:", cpu_clean[:25] + ("..." if len(cpu_clean) > 25 else ""))
         grid.add_row("MİMARİ:", uname.machine)
-        grid.add_row("ÇALIŞMA:", uptime_str.strip())
-        grid.add_row("CPU:", cpu_clean[:25] + ("..." if len(cpu_clean) > 25 else ""))
-        grid.add_row("MİMARİ:", uname.machine)
-        grid.add_row("SÜRE:", uptime_str)
+        grid.add_row("ÇALIŞMA:", uptime_str)
 
         return Panel(
             Align.center(grid, vertical="middle"),
