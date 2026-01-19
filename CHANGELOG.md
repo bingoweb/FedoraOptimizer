@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.19] - 2026-01-19
+
+### New Features 🚀
+- Polish dashboard and fix double prompt interaction
+
+
+
 ## [0.4.18] - 2026-01-18
 
 ### Improvements 🔧
