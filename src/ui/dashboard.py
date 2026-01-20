@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from modules.utils import Theme
+from modules.utils import Theme, format_bytes
 
 
 class Dashboard:
@@ -188,11 +188,7 @@ class Dashboard:
         self.last_time = now
 
         def fmt(s):
-            if s > 1024**2:
-                return f"{s/1024**2:.1f} MB/s"
-            if s > 1024:
-                return f"{s/1024:.1f} KB/s"
-            return f"{s:.0f} B/s"
+            return f"{format_bytes(s, precision=1)}/s"
 
         grid = Table.grid(expand=True, padding=(0, 1))
         grid.add_column(style="bold white")
@@ -201,8 +197,8 @@ class Dashboard:
         grid.add_row("İNDİRME:", fmt(down_speed))
         grid.add_row("YÜKLEME:", fmt(up_speed))
         grid.add_row("", "")
-        grid.add_row("[dim]TOPLAM İNEN:[/dim]", str(cur_net.bytes_recv // 1024**2) + " MB")
-        grid.add_row("[dim]TOPLAM GİDEN:[/dim]", str(cur_net.bytes_sent // 1024**2) + " MB")
+        grid.add_row("[dim]TOPLAM İNEN:[/dim]", format_bytes(cur_net.bytes_recv))
+        grid.add_row("[dim]TOPLAM GİDEN:[/dim]", format_bytes(cur_net.bytes_sent))
 
         return Panel(
             Align.center(grid, vertical="middle"),

@@ -49,12 +49,13 @@ def get_directory_size(path):
         pass # Permission issues or others
     return total_size
 
-def format_bytes(size):
+def format_bytes(size, precision=2):
+    """Formats bytes into human readable string with customizable precision."""
     # 2**10 = 1024
     power = 2**10
     n = 0
     power_labels = {0 : '', 1: 'K', 2: 'M', 3: 'G', 4: 'T'}
-    while size > power:
+    while size >= power:
         size /= power
         n += 1
-    return f"{size:.2f} {power_labels[n]}B"
+    return f"{size:.{precision}f} {power_labels[n]}B"
