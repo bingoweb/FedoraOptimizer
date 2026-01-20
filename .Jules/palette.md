@@ -39,3 +39,7 @@
 ## 2025-05-24 - Double Prompt Anti-Pattern
 **Learning:** When using a dedicated method for user input (like `wait_for_key`), avoid printing a prompt message immediately before calling it if the method itself handles the prompt display. This redundancy creates a jarring "double prompt" effect.
 **Action:** Rely on the default message handling within input utility methods to ensure a single, consistent prompt style.
+
+## 2025-05-24 - Data Unit Consistency
+**Learning:** Inconsistent data units (MB vs GB vs KB) in dashboards increase cognitive load. Users struggle to compare "25600 MB" vs "2.4 GB". Automatic scaling of units (formatting bytes to the largest appropriate unit) makes data instantly readable.
+**Action:** Centralize byte formatting logic with automatic scaling (KB/MB/GB/TB) and apply it consistently across all dashboard panels (network, disk, memory).
