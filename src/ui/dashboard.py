@@ -154,15 +154,21 @@ class Dashboard:
         )
         table.add_column("PID", style="dim white", width=6)
         table.add_column("İŞLEM", style="white")
-        table.add_column("CPU", justify="right", style=Theme.SUCCESS)
-        table.add_column("RAM", justify="right", style="cyan")
+        table.add_column("CPU", justify="right")
+        table.add_column("RAM", justify="right")
 
         for p in top_cpu:
+            cpu_val = p['cpu_percent']
+            mem_val = p['memory_percent']
+
+            c_color = self.get_color(cpu_val, 50, 80)
+            m_color = self.get_color(mem_val, 50, 80)
+
             table.add_row(
                 str(p['pid']),
                 p['name'].title(),  # Title case looks better than UPPER
-                f"{p['cpu_percent']:.1f}%",
-                f"{p['memory_percent']:.1f}%"
+                f"[{c_color}]{cpu_val:.1f}%[/]",
+                f"[{m_color}]{mem_val:.1f}%[/]"
             )
 
         return Panel(
