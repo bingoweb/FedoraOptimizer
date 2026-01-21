@@ -267,11 +267,15 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
-### v0.4.20 (January 20, 2026) 🌟
-- Improve dashboard network stats formatting
+### v0.4.21 (January 21, 2026) 🌟
+- Add color coding to process stats
 
 <details>
 <summary>View Older Updates (v0.3.x)</summary>
+
+### v0.4.20 (January 20, 2026) 🌟
+- Improve dashboard network stats formatting
+
 
 ### v0.4.19 (January 19, 2026) 🌟
 - Polish dashboard and fix double prompt interaction
