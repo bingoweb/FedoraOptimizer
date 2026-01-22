@@ -88,7 +88,7 @@ class Dashboard:
         grid.add_row("CİHAZ:", hostname)
         grid.add_row("OS:", distro)
         grid.add_row("KERNEL:", k_ver)
-        grid.add_row("CPU:", cpu_clean[:25] + ("..." if len(cpu_clean) > 25 else ""))
+        grid.add_row("CPU:", cpu_clean[:25] + ("…" if len(cpu_clean) > 25 else ""))
         grid.add_row("MİMARİ:", uname.machine)
         grid.add_row("ÇALIŞMA:", uptime_str)
 
@@ -138,7 +138,9 @@ class Dashboard:
         procs = []
         for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
             try:
-                p.info['name'] = p.info['name'][:15]
+                name = p.info['name']
+                if len(name) > 15:
+                    p.info['name'] = name[:14] + "…"
                 procs.append(p.info)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
