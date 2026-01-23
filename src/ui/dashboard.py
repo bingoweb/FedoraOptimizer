@@ -136,7 +136,9 @@ class Dashboard:
     def get_process_panel(self):
         """Renders active processes panel."""
         procs = []
-        for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+        for p in psutil.process_iter([
+            'pid', 'name', 'cpu_percent', 'memory_percent', 'memory_info'
+        ]):
             try:
                 name = p.info['name']
                 if len(name) > 15:
@@ -162,6 +164,7 @@ class Dashboard:
         for p in top_cpu:
             cpu_val = p['cpu_percent']
             mem_val = p['memory_percent']
+            mem_bytes = p['memory_info'].rss
 
             c_color = self.get_color(cpu_val, 50, 80)
             m_color = self.get_color(mem_val, 50, 80)
@@ -170,7 +173,7 @@ class Dashboard:
                 str(p['pid']),
                 p['name'].title(),  # Title case looks better than UPPER
                 f"[{c_color}]{cpu_val:.1f}%[/]",
-                f"[{m_color}]{mem_val:.1f}%[/]"
+                f"[{m_color}]{format_bytes(mem_bytes, precision=1)}[/]"
             )
 
         return Panel(
