@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.23] - 2026-01-23
+
+### New Features 🚀
+- Improve process list memory display with absolute units
+
+
+
 ## [0.4.22] - 2026-01-22
 
 ### Improvements 🔧
