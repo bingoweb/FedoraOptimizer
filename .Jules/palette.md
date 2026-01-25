@@ -43,3 +43,7 @@
 ## 2025-05-24 - Data Unit Consistency
 **Learning:** Inconsistent data units (MB vs GB vs KB) in dashboards increase cognitive load. Users struggle to compare "25600 MB" vs "2.4 GB". Automatic scaling of units (formatting bytes to the largest appropriate unit) makes data instantly readable.
 **Action:** Centralize byte formatting logic with automatic scaling (KB/MB/GB/TB) and apply it consistently across all dashboard panels (network, disk, memory).
+
+## 2025-05-24 - Responsive Text Truncation
+**Learning:** Hardcoding string limits (e.g. 15 chars) hurts usability on wide terminals. `rich`'s `no_wrap=True` and `overflow="ellipsis"` columns handle this responsively.
+**Action:** Avoid manual string slicing for TUI tables; let the layout engine handle truncation.
