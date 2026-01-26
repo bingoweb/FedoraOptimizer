@@ -6,6 +6,7 @@ Refactored to use modular components (Scanner, ML Model).
 import logging
 from typing import List, Dict
 from rich.table import Table
+from rich import box
 from ..utils import run_command, console
 from .hardware import HardwareDetector
 from .models import OptimizationProposal
@@ -224,7 +225,7 @@ class AIOptimizationEngine:
                     reason="[INTEL HYBRID] Thread Director (ITMT) aktivasyonu.",
                     category="cpu", priority="critical"
                 ))
-        
+
         # Buffer sizes for everyone, but higher priority for some
         current_rmem = current_values.get("net.core.rmem_max", "0")
         if current_rmem != "N/A":
@@ -237,7 +238,7 @@ class AIOptimizationEngine:
                     ))
             except ValueError:
                 pass
-        
+
         current_wmem = current_values.get("net.core.wmem_max", "0")
         if current_wmem != "N/A":
             try:
@@ -265,27 +266,26 @@ class AIOptimizationEngine:
         for cat, proposals in categories.items():
             console.print(f"[bold]{cat.title()}[/bold]")
 
-            table = Table(box=None, padding=(0, 1), expand=True)
+            table = Table(box=box.ROUNDED, padding=(0, 1), expand=True)
             table.add_column("Parametre", style="cyan", width=28)
             table.add_column("Mevcut", style="red", width=10)
             table.add_column("Önerilen", style="green", width=10)
             table.add_column("Öncelik", width=10)
+            table.add_column("Açıklama", style="dim white")
 
             for p in proposals:
                 prio_text = "🔴" if p.priority == "critical" else \
                             "🟡" if p.priority == "recommended" else "⚪"
-                table.add_row(p.param, p.current, p.proposed, prio_text)
+                table.add_row(p.param, p.current, p.proposed, prio_text, p.reason)
 
             console.print(table)
-            for p in proposals:
-                console.print(f"  [dim]→ {p.reason}[/dim]")
             console.print()
 
     def apply_proposals(self, backup_first: bool = True, category: str = "general") -> List[str]:
         """Apply approved proposals and return list of applied changes"""
         logger.info("="*60)
         logger.info(f"📦 APPLY_PROPOSALS STARTED - Category: {category}")
-        
+
         applied = []
         changes_for_tx = []
 
@@ -298,7 +298,7 @@ class AIOptimizationEngine:
 
         for i, p in enumerate(self.proposals, 1):
             logger.info(f"Applying {p.param} ({p.current} -> {p.proposed})")
-            
+
             try:
                 success = False
                 if p.command:
@@ -308,7 +308,7 @@ class AIOptimizationEngine:
                     cmd = f"sysctl -w {p.param}={p.proposed}"
                     s, _, _ = run_command(cmd, sudo=True)
                     success = s
-                    
+
                     # Verification
                     _, verify_out, _ = run_command(f"sysctl -n {p.param}", sudo=True)
                     if verify_out and verify_out.strip() == p.proposed:
@@ -338,7 +338,7 @@ class AIOptimizationEngine:
 
         if applied:
             self._persist_sysctl_changes()
-        
+
         logger.info(f"📦 Applied {len(applied)} changes.")
         return applied
 
