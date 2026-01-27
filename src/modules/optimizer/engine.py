@@ -6,6 +6,7 @@ Refactored to use modular components (Scanner, ML Model).
 import logging
 from typing import List, Dict
 from rich.table import Table
+from rich import box
 from ..utils import run_command, console
 from .hardware import HardwareDetector
 from .models import OptimizationProposal
@@ -265,20 +266,19 @@ class AIOptimizationEngine:
         for cat, proposals in categories.items():
             console.print(f"[bold]{cat.title()}[/bold]")
 
-            table = Table(box=None, padding=(0, 1), expand=True)
+            table = Table(box=box.ROUNDED, padding=(0, 1), expand=True)
             table.add_column("Parametre", style="cyan", width=28)
             table.add_column("Mevcut", style="red", width=10)
             table.add_column("Önerilen", style="green", width=10)
             table.add_column("Öncelik", width=10)
+            table.add_column("Açıklama", style="dim white")
 
             for p in proposals:
                 prio_text = "🔴" if p.priority == "critical" else \
                             "🟡" if p.priority == "recommended" else "⚪"
-                table.add_row(p.param, p.current, p.proposed, prio_text)
+                table.add_row(p.param, p.current, p.proposed, prio_text, p.reason)
 
             console.print(table)
-            for p in proposals:
-                console.print(f"  [dim]→ {p.reason}[/dim]")
             console.print()
 
     def apply_proposals(self, backup_first: bool = True, category: str = "general") -> List[str]:
