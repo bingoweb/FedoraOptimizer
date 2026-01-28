@@ -43,3 +43,7 @@
 ## 2025-05-24 - Data Unit Consistency
 **Learning:** Inconsistent data units (MB vs GB vs KB) in dashboards increase cognitive load. Users struggle to compare "25600 MB" vs "2.4 GB". Automatic scaling of units (formatting bytes to the largest appropriate unit) makes data instantly readable.
 **Action:** Centralize byte formatting logic with automatic scaling (KB/MB/GB/TB) and apply it consistently across all dashboard panels (network, disk, memory).
+
+## 2025-05-24 - Defensive Empty States
+**Learning:** Returning an empty table (headers only) when no data is available is confusing. Users may think the app is broken or loading.
+**Action:** Always implement a defensive check for empty data collections and return a specific `Panel` with a centered, helpful message (e.g., "No items found") instead of an empty table.
