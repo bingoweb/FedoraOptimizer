@@ -149,6 +149,15 @@ class Dashboard:
 
         top_cpu = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:5]
 
+        if not top_cpu:
+            return Panel(
+                Align.center("[yellow]İşlem bulunamadı[/yellow]", vertical="middle"),
+                title=f"[bold {Theme.TEXT}] EN AKTİF İŞLEMLER [/]",
+                border_style=Theme.BORDER,
+                box=box.ROUNDED,
+                padding=(1, 1)
+            )
+
         table = Table(
             box=None,
             expand=True,
