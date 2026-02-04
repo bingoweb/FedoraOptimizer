@@ -140,9 +140,6 @@ class Dashboard:
             'pid', 'name', 'cpu_percent', 'memory_percent', 'memory_info'
         ]):
             try:
-                name = p.info['name']
-                if len(name) > 15:
-                    p.info['name'] = name[:14] + "…"
                 procs.append(p.info)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
@@ -157,7 +154,7 @@ class Dashboard:
             header_style=f"bold {Theme.PRIMARY}"
         )
         table.add_column("PID", style="dim white", width=6)
-        table.add_column("İŞLEM", style="white")
+        table.add_column("İŞLEM", style="white", no_wrap=True, overflow="ellipsis")
         table.add_column("CPU", justify="right")
         table.add_column("RAM", justify="right")
 
