@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.27] - 2026-02-23
+
+### New Features 🚀
+- Improve proposals table UX with box borders and inline reasons
+
+
+
 ## [0.4.26] - 2026-02-23
 
 ### New Features 🚀
