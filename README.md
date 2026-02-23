@@ -267,11 +267,15 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
-### v0.4.29 (February 23, 2026) 🌟
-- Improve process panel truncation and add empty state
+### v0.4.30 (February 23, 2026) 🌟
+- Improve dashboard process panel UX
 
 <details>
 <summary>View Older Updates (v0.3.x)</summary>
+
+### v0.4.29 (February 23, 2026) 🌟
+- Improve process panel truncation and add empty state
+
 
 ### v0.4.28 (February 23, 2026) 🌟
 - Add empty state to dashboard process panel

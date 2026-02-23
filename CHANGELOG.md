@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.30] - 2026-02-23
+
+### New Features 🚀
+- Improve dashboard process panel UX
+
+
+
 ## [0.4.29] - 2026-02-23
 
 ### Other Changes
