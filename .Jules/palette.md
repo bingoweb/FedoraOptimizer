@@ -44,6 +44,9 @@
 **Learning:** Inconsistent data units (MB vs GB vs KB) in dashboards increase cognitive load. Users struggle to compare "25600 MB" vs "2.4 GB". Automatic scaling of units (formatting bytes to the largest appropriate unit) makes data instantly readable.
 **Action:** Centralize byte formatting logic with automatic scaling (KB/MB/GB/TB) and apply it consistently across all dashboard panels (network, disk, memory).
 
+## 2026-02-02 - Empty States in Dashboards
+**Learning:** Empty tables in dashboards create uncertainty ("Is it broken or just empty?"). A clear, centered message provides necessary system status feedback.
+**Action:** Implement defensive empty states (e.g., "[yellow]No items found[/yellow]") for all dynamic lists in TUI panels.
 ## 2025-05-24 - Defensive Empty States
 **Learning:** In dynamic dashboards, empty data sets (like empty process lists) can look broken if rendered as empty tables. A dedicated empty state with a helpful message communicates "system normal, nothing found" instead of "something broke".
 **Action:** Always implement explicit empty state checks for lists/tables in the TUI, rendering a centered, descriptive message within the same panel structure.
