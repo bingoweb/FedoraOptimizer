@@ -150,6 +150,10 @@ class Dashboard:
         if not top_cpu:
             return Panel(
                 Align.center("[yellow]İşlem bulunamadı[/yellow]", vertical="middle"),
+                title=f"[bold {Theme.TEXT}] EN AKTİF İŞLEMLER [/]",
+                border_style=Theme.BORDER,
+                box=box.ROUNDED,
+                padding=(0, 1)
         # Defensive Empty State
         if not top_cpu:
             return Panel(
@@ -168,6 +172,7 @@ class Dashboard:
             header_style=f"bold {Theme.PRIMARY}"
         )
         table.add_column("PID", style="dim white", width=6)
+        table.add_column("İŞLEM", style="white", no_wrap=True, overflow="ellipsis")
         # Responsive truncation
         table.add_column("İŞLEM", style="white", overflow="ellipsis", no_wrap=True)
         table.add_column("CPU", justify="right")
