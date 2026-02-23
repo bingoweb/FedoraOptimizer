@@ -140,9 +140,7 @@ class Dashboard:
             'pid', 'name', 'cpu_percent', 'memory_percent', 'memory_info'
         ]):
             try:
-                name = p.info['name']
-                if len(name) > 15:
-                    p.info['name'] = name[:14] + "…"
+                # Let rich handle truncation responsively
                 procs.append(p.info)
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
@@ -152,6 +150,14 @@ class Dashboard:
         if not top_cpu:
             return Panel(
                 Align.center("[yellow]İşlem bulunamadı[/yellow]", vertical="middle"),
+                title=f"[bold {Theme.TEXT}] EN AKTİF İŞLEMLER [/]",
+                border_style=Theme.BORDER,
+                box=box.ROUNDED,
+                padding=(0, 1)
+        # Defensive Empty State
+        if not top_cpu:
+            return Panel(
+                Align.center(Text("İşlem bulunamadı", style="dim white"), vertical="middle"),
                 title=f"[bold {Theme.TEXT}] EN AKTİF İŞLEMLER [/]",
                 border_style=Theme.BORDER,
                 box=box.ROUNDED,
@@ -166,7 +172,9 @@ class Dashboard:
             header_style=f"bold {Theme.PRIMARY}"
         )
         table.add_column("PID", style="dim white", width=6)
-        table.add_column("İŞLEM", style="white")
+        table.add_column("İŞLEM", style="white", no_wrap=True, overflow="ellipsis")
+        # Responsive truncation
+        table.add_column("İŞLEM", style="white", overflow="ellipsis", no_wrap=True)
         table.add_column("CPU", justify="right")
         table.add_column("RAM", justify="right")
 
