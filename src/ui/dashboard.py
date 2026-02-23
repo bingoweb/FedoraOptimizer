@@ -147,6 +147,9 @@ class Dashboard:
 
         top_cpu = sorted(procs, key=lambda p: p['cpu_percent'], reverse=True)[:5]
 
+        if not top_cpu:
+            return Panel(
+                Align.center("[yellow]İşlem bulunamadı[/yellow]", vertical="middle"),
         # Defensive Empty State
         if not top_cpu:
             return Panel(
