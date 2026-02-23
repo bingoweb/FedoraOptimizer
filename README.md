@@ -267,11 +267,15 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
-### v0.4.24 (February 23, 2026) 🌟
-- Improve Quick Optimize feedback and clean up TUI imports
+### v0.4.25 (February 23, 2026) 🌟
+- Improve proposal table readability by integrating reasons
 
 <details>
 <summary>View Older Updates (v0.3.x)</summary>
+
+### v0.4.24 (February 23, 2026) 🌟
+- Improve Quick Optimize feedback and clean up TUI imports
+
 
 ### v0.4.23 (January 23, 2026) 🌟
 - Improve process list memory display with absolute units
