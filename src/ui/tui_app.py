@@ -69,6 +69,8 @@ class OptimizerApp:
         self.key_listener = KeyListener()
         self.layout = Layout()
         self.message = f"[bold {Theme.PRIMARY}]KOMUT:[/] [white]1-8[/] Seçenekler - [white]0[/] Çıkış"
+        self.default_message = self.message
+        self.confirm_exit = False
         
         # Auto-Resize terminal
         sys.stdout.write("\x1b[8;38;120t")
@@ -190,9 +192,10 @@ class OptimizerApp:
 
     def get_footer(self):
         """Footer with controls"""
+        style = Theme.WARNING if getattr(self, "confirm_exit", False) else Theme.BORDER
         return Panel(
             Text.from_markup(self.message),
-            border_style=Theme.BORDER,
+            border_style=style,
             box=box.ROUNDED,
             padding=(0, 1)
         )
@@ -424,18 +427,21 @@ class OptimizerApp:
                         key = listener.get_key()
                         
                         if key:
-                            if key == '0':
-                                if Confirm.ask("\n[yellow]Çıkmak istediğinize emin misiniz?[/]", default=False):
+                            if self.confirm_exit:
+                                if key in ['y', 'Y', 'e', 'E']:
                                     console.print("[yellow]Güle güle...[/yellow]")
                                     break
-                                else:
-                                    # Clear the confirmation line/prompt if needed,
-                                    # or just let the loop redraw the UI.
-                                    pass
-                            elif key in ['1', '2', '3', '4', '5', '6', '7', '8']:
-                                listener.stop()
-                                self.run_task(live, key)
-                                listener.start()
+                                elif key in ['n', 'N', 'h', 'H', '\x1b', '0']:
+                                    self.confirm_exit = False
+                                    self.message = self.default_message
+                            else:
+                                if key == '0':
+                                    self.confirm_exit = True
+                                    self.message = f"[bold {Theme.WARNING}]Çıkmak istediğinize emin misiniz? [E]vet / [H]ayır[/]"
+                                elif key in ['1', '2', '3', '4', '5', '6', '7', '8']:
+                                    listener.stop()
+                                    self.run_task(live, key)
+                                    listener.start()
                         
                         time.sleep(0.05)
                         
