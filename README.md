@@ -267,11 +267,15 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
-### v0.4.33 (February 23, 2026) 🌟
-- Add defensive empty state to dashboard process panel
+### v0.4.34 (February 23, 2026) 🌟
+- Add empty state to process dashboard
 
 <details>
 <summary>View Older Updates (v0.3.x)</summary>
+
+### v0.4.33 (February 23, 2026) 🌟
+- Add defensive empty state to dashboard process panel
+
 
 ### v0.4.32 (February 23, 2026) 🌟
 - Add empty state to process panel

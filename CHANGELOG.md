@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.34] - 2026-02-23
+
+### New Features 🚀
+- Add empty state to process dashboard
+
+
+
 ## [0.4.33] - 2026-02-23
 
 ### New Features 🚀
