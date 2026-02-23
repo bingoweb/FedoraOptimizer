@@ -267,11 +267,15 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
-### v0.4.25 (February 23, 2026) 🌟
-- Improve proposal table readability by integrating reasons
+### v0.4.26 (February 23, 2026) 🌟
+- Improve dashboard process list responsiveness
 
 <details>
 <summary>View Older Updates (v0.3.x)</summary>
+
+### v0.4.25 (February 23, 2026) 🌟
+- Improve proposal table readability by integrating reasons
+
 
 ### v0.4.24 (February 23, 2026) 🌟
 - Improve Quick Optimize feedback and clean up TUI imports
