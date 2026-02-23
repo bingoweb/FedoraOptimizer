@@ -267,11 +267,15 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
-### v0.4.27 (February 23, 2026) 🌟
-- Improve proposals table UX with box borders and inline reasons
+### v0.4.28 (February 23, 2026) 🌟
+- Add empty state to dashboard process panel
 
 <details>
 <summary>View Older Updates (v0.3.x)</summary>
+
+### v0.4.27 (February 23, 2026) 🌟
+- Improve proposals table UX with box borders and inline reasons
+
 
 ### v0.4.26 (February 23, 2026) 🌟
 - Improve dashboard process list responsiveness
