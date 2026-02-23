@@ -267,11 +267,15 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
-### v0.4.36 (February 23, 2026) 🌟
-- Add inline exit confirmation to TUI
+### v0.4.37 (February 23, 2026) 🌟
+- Improve process panel UX with responsive truncation and empty state
 
 <details>
 <summary>View Older Updates (v0.3.x)</summary>
+
+### v0.4.36 (February 23, 2026) 🌟
+- Add inline exit confirmation to TUI
+
 
 ### v0.4.35 (February 23, 2026) 🌟
 - Improve dashboard process name truncation
