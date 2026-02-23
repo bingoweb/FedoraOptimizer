@@ -47,3 +47,12 @@
 ## 2025-05-24 - Defensive Process List & Truncation
 **Learning:** Manual string truncation for process names is brittle and looks unprofessional. Using `rich`'s `no_wrap=True` and `overflow="ellipsis"` provides responsive, cleaner UIs. Also, process lists can be empty (e.g., filtered/error), and an empty table looks broken.
 **Action:** Always rely on `rich` for text overflow handling in Tables and provide a dedicated "Empty State" panel when data lists are empty.
+## 2025-05-24 - Defensive Empty States
+**Learning:** Returning an empty table (headers only) when no data is available is confusing. Users may think the app is broken or loading.
+**Action:** Always implement a defensive check for empty data collections and return a specific `Panel` with a centered, helpful message (e.g., "No items found") instead of an empty table.
+## 2025-05-24 - Responsive Text Truncation
+**Learning:** Hardcoding string limits (e.g. 15 chars) hurts usability on wide terminals. `rich`'s `no_wrap=True` and `overflow="ellipsis"` columns handle this responsively.
+**Action:** Avoid manual string slicing for TUI tables; let the layout engine handle truncation.
+## 2026-01-24 - Unified Feedback for Multi-Step Actions
+**Learning:** "Quick" actions that chain multiple sub-tasks (like DNF + Boot optimization) feel disjointed if each sub-task pops its own UI without a unifying frame.
+**Action:** Wrap multi-step actions in a master UI block with a header, explicit step indicators (1/N), and a final summary to provide context and continuity.
