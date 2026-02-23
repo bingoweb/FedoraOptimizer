@@ -267,11 +267,15 @@ fedoraclean/
 
 ## 📰 Recent Updates
 
-### v0.4.23 (January 23, 2026) 🌟
-- Improve process list memory display with absolute units
+### v0.4.24 (February 23, 2026) 🌟
+- Improve Quick Optimize feedback and clean up TUI imports
 
 <details>
 <summary>View Older Updates (v0.3.x)</summary>
+
+### v0.4.23 (January 23, 2026) 🌟
+- Improve process list memory display with absolute units
+
 
 ### v0.4.22 (January 22, 2026) 🌟
 - Improve text truncation in dashboard
