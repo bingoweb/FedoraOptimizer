@@ -47,3 +47,27 @@
 ## 2025-10-24 - Inline Exit Confirmation
 **Learning:** Using `rich.prompt.Confirm` inside a `rich.live.Live` loop while managing raw input with `tty.setcbreak` creates a jarring and potentially broken experience. The prompt fights with the live display refresh, and input buffering issues occur.
 **Action:** For critical interruptions like exit confirmation in a TUI loop, use inline state management (flags) to change the UI (e.g., Footer message) and intercept keys within the existing event loop, rather than shelling out to a blocking prompt.
+## 2026-02-04 - Dynamic Text Truncation
+**Learning:** Hardcoding string truncation (e.g., `text[:15] + "..."`) for "clean" UI layouts is an anti-pattern in responsive TUI libraries like Rich. It wastes space on large screens and doesn't adapt to smaller ones.
+**Action:** Use `no_wrap=True` and `overflow="ellipsis"` on `Table` columns to let the layout engine handle content length dynamically.
+## 2026-02-03 - Empty State Feedback
+**Learning:** Displaying an empty table when no data is available (e.g., filtered process list) is confusing and looks like a bug. A dedicated, centered "Empty State" message provides clarity and reassurance.
+**Action:** Always check for empty data sets in TUI panels and render a friendly "Not Found" message in a Panel instead of an empty Table.
+## 2026-02-02 - Empty States in Dashboards
+**Learning:** Empty tables in dashboards create uncertainty ("Is it broken or just empty?"). A clear, centered message provides necessary system status feedback.
+**Action:** Implement defensive empty states (e.g., "[yellow]No items found[/yellow]") for all dynamic lists in TUI panels.
+## 2025-05-24 - Defensive Empty States
+**Learning:** In dynamic dashboards, empty data sets (like empty process lists) can look broken if rendered as empty tables. A dedicated empty state with a helpful message communicates "system normal, nothing found" instead of "something broke".
+**Action:** Always implement explicit empty state checks for lists/tables in the TUI, rendering a centered, descriptive message within the same panel structure.
+## 2025-05-24 - Defensive Process List & Truncation
+**Learning:** Manual string truncation for process names is brittle and looks unprofessional. Using `rich`'s `no_wrap=True` and `overflow="ellipsis"` provides responsive, cleaner UIs. Also, process lists can be empty (e.g., filtered/error), and an empty table looks broken.
+**Action:** Always rely on `rich` for text overflow handling in Tables and provide a dedicated "Empty State" panel when data lists are empty.
+## 2025-05-24 - Defensive Empty States
+**Learning:** Returning an empty table (headers only) when no data is available is confusing. Users may think the app is broken or loading.
+**Action:** Always implement a defensive check for empty data collections and return a specific `Panel` with a centered, helpful message (e.g., "No items found") instead of an empty table.
+## 2025-05-24 - Responsive Text Truncation
+**Learning:** Hardcoding string limits (e.g. 15 chars) hurts usability on wide terminals. `rich`'s `no_wrap=True` and `overflow="ellipsis"` columns handle this responsively.
+**Action:** Avoid manual string slicing for TUI tables; let the layout engine handle truncation.
+## 2026-01-24 - Unified Feedback for Multi-Step Actions
+**Learning:** "Quick" actions that chain multiple sub-tasks (like DNF + Boot optimization) feel disjointed if each sub-task pops its own UI without a unifying frame.
+**Action:** Wrap multi-step actions in a master UI block with a header, explicit step indicators (1/N), and a final summary to provide context and continuity.
