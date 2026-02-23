@@ -43,3 +43,7 @@
 ## 2025-05-24 - Data Unit Consistency
 **Learning:** Inconsistent data units (MB vs GB vs KB) in dashboards increase cognitive load. Users struggle to compare "25600 MB" vs "2.4 GB". Automatic scaling of units (formatting bytes to the largest appropriate unit) makes data instantly readable.
 **Action:** Centralize byte formatting logic with automatic scaling (KB/MB/GB/TB) and apply it consistently across all dashboard panels (network, disk, memory).
+
+## 2026-01-24 - Unified Feedback for Multi-Step Actions
+**Learning:** "Quick" actions that chain multiple sub-tasks (like DNF + Boot optimization) feel disjointed if each sub-task pops its own UI without a unifying frame.
+**Action:** Wrap multi-step actions in a master UI block with a header, explicit step indicators (1/N), and a final summary to provide context and continuity.
