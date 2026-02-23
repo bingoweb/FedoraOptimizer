@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.25] - 2026-02-23
+
+### New Features 🚀
+- Improve proposal table readability by integrating reasons
+
+
+
+## [0.4.24] - 2026-02-23
+
+### Other Changes
+- Improve Quick Optimize feedback and clean up TUI imports
+
+
+
 ## [0.4.23] - 2026-01-23
 
 ### New Features 🚀
