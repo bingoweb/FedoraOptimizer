@@ -61,7 +61,7 @@ gaming_opt = GamingOptimizer(optimizer.hw)
 class OptimizerApp:
     """Streamlined Optimization-Only TUI Application"""
     
-    VERSION = "0.4.23"
+    VERSION = "0.4.27"
     
     def __init__(self):
         self.console = Console()
@@ -241,8 +241,28 @@ class OptimizerApp:
         
         elif key == '2':
             def quick_optimize():
+                console.print()
+                console.print(Panel(
+                    "[bold white]⚡ HIZLI OPTİMİZASYON[/]",
+                    border_style="cyan",
+                    box=box.DOUBLE_EDGE
+                ))
+                console.print()
+
+                console.print("[bold cyan]1/2. Paket Yöneticisi Optimizasyonu...[/]")
                 optimizer.apply_dnf5_optimizations()
+
+                console.print("\n[bold cyan]2/2. Boot Profili Optimizasyonu...[/]")
                 optimizer.optimize_boot_profile()
+
+                console.print()
+                console.print(Panel(
+                    "[green]✅ Hızlı optimizasyon serisi tamamlandı![/]\n\n"
+                    "[white]• Sistem paketleri ve açılış süreci optimize edildi[/]\n"
+                    "[dim]Detaylar için yukarıdaki raporları inceleyin[/]",
+                    border_style="green",
+                    box=box.ROUNDED
+                ))
             self.pause_and_run(live, quick_optimize, "2 - HIZLI OPTİMİZE")
         
         elif key == '3':
@@ -254,8 +274,6 @@ class OptimizerApp:
         
         elif key == '5':
             def io_optimize():
-                from rich.panel import Panel
-                from rich import box
                 console.print()
                 console.print(Panel(
                     "[bold white]💾 I/O SCHEDULER OPTİMİZASYONU[/]",
@@ -279,8 +297,6 @@ class OptimizerApp:
         
         elif key == '6':
             def network_optimize():
-                from rich.panel import Panel
-                from rich import box
                 console.print()
                 console.print(Panel(
                     "[bold white]🌐 AĞ OPTİMİZASYONU[/]",
@@ -305,8 +321,6 @@ class OptimizerApp:
         
         elif key == '7':
             def kernel_optimize():
-                from rich.panel import Panel
-                from rich import box
                 console.print()
                 console.print(Panel(
                     "[bold white]⚙️  KERNEL PARAMETRELERİ[/]",
