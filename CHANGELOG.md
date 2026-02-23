@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.29] - 2026-02-23
+
+### Other Changes
+- Improve process panel truncation and add empty state
+
+
+
+## [0.4.28] - 2026-02-23
+
+### New Features 🚀
+- Add empty state to dashboard process panel
+
+
+
+## [0.4.27] - 2026-02-23
+
+### New Features 🚀
+- Improve proposals table UX with box borders and inline reasons
+
+
+
+## [0.4.26] - 2026-02-23
+
+### New Features 🚀
+- Improve dashboard process list responsiveness
+
+
+
+## [0.4.25] - 2026-02-23
+
+### New Features 🚀
+- Improve proposal table readability by integrating reasons
+
+
+
+## [0.4.24] - 2026-02-23
+
+### Other Changes
+- Improve Quick Optimize feedback and clean up TUI imports
+
+
+
 ## [0.4.23] - 2026-01-23
 
 ### New Features 🚀
